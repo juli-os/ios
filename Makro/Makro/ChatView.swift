@@ -35,7 +35,7 @@ struct ChatView: View {
     /// 新单由引擎从对话上下文自然携带原单关联。
     private func followUp(wfID: String, title: String) {
         let quoted = title.isEmpty ? "" : "「\(title)」"
-        inputText = "跟进单 \(wfID)\(quoted)：请基于该单的上下文继续迭代优化——"
+        inputText = "Follow-up \(wfID)\(quoted): keep iterating with this job’s context —"
         inputFocused = true
     }
 
@@ -110,7 +110,7 @@ struct ChatView: View {
             .navigationTitle("")
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("发单")
+                    Text("Intake")
                         .font(DS.display(18, .semibold))
                         .tracking(-0.3)
                         .foregroundStyle(.primary)
@@ -181,9 +181,9 @@ struct ChatView: View {
             // 0929：撤掉 onDisappear→disconnect——TabView 切 tab 必触发它，
             // 聊天中切去看一眼 Flow/Agents 回来就丢中间的回复广播（服务器不
             // 回放）。socket 生命周期由 VM 按前后台事件管理（见 ChatViewModel）。
-            .confirmationDialog("清空这段对话？", isPresented: $showClearConfirm, titleVisibility: .visible) {
-                Button("清空", role: .destructive) { vm.clearTranscript() }
-                Button("取消", role: .cancel) {}
+            .confirmationDialog("Clear this conversation?", isPresented: $showClearConfirm, titleVisibility: .visible) {
+                Button("Clear", role: .destructive) { vm.clearTranscript() }
+                Button("Cancel", role: .cancel) {}
             }
         }
     }
@@ -198,7 +198,7 @@ struct ChatView: View {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(DS.Ink.mintDeep)
-                    Text("待确认开单")
+                    Text("Job card — confirm to create")
                         .font(DS.text(14, .semibold))
                         .foregroundStyle(.primary)
                     Spacer()
@@ -228,7 +228,7 @@ struct ChatView: View {
                         Image(systemName: "arrowshape.turn.up.right.fill")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(DS.Ink.mintDeep)
-                        Text("落点：\(landing.session)")
+                        Text("Lands: \(landing.session)")
                             .font(DS.text(12, .semibold))
                             .foregroundStyle(.primary)
                         if !landing.note.isEmpty {
@@ -240,7 +240,7 @@ struct ChatView: View {
                     }
                 }
                 Toggle(isOn: $vm.pendingAutoApprove) {
-                    Text("本单免批（外发邮件仍会等我）")
+                    Text("Auto-approve this job (outbound email still waits for me)")
                         .font(DS.text(12, .regular))
                         .foregroundStyle(.secondary)
                 }
@@ -249,7 +249,7 @@ struct ChatView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 10) {
                     Button { vm.denyPlan() } label: {
-                        Text("取消")
+                        Text("Cancel")
                             .font(DS.text(14, .semibold))
                             .foregroundStyle(.primary)
                             .frame(maxWidth: .infinity)
@@ -258,7 +258,7 @@ struct ChatView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                     Button { vm.confirmPlan() } label: {
-                        Text("确认开单")
+                        Text("Create job")
                             .font(DS.text(14, .semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -298,10 +298,10 @@ struct ChatView: View {
                     .foregroundStyle(DS.Ink.mint)
             }
             VStack(spacing: 4) {
-                Text("说一句话，开一单")
+                Text("One sentence is enough")
                     .font(DS.display(17, .semibold))
                     .foregroundStyle(.primary)
-                Text("juli 会问清楚要什么，给你一张单子卡——确认才开单。")
+                Text("juli asks until the request is clear, then hands you a job card — nothing runs until you confirm.")
                     .font(DS.text(13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -368,11 +368,11 @@ struct ChatView: View {
                         .font(.system(size: 20, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
-                .confirmationDialog("添加附件", isPresented: $showAttachMenu) {
-                    Button("拍照") { showCamera = true }
-                    Button("从相册选择") { showPhotos = true }
-                    Button("选文件") { showFiles = true }
-                    Button("取消", role: .cancel) {}
+                .confirmationDialog("Add attachment", isPresented: $showAttachMenu) {
+                    Button("Take photo") { showCamera = true }
+                    Button("Photo library") { showPhotos = true }
+                    Button("Choose file") { showFiles = true }
+                    Button("Cancel", role: .cancel) {}
                 }
 
                 micButton
@@ -384,7 +384,7 @@ struct ChatView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     } else {
-                        TextField("想说的事，一句话即可", text: $inputText)
+                        TextField("What do you need? One line is enough", text: $inputText)
                             .font(DS.mono(14, .regular))
                             .foregroundStyle(.primary)
                             .focused($inputFocused)
@@ -473,13 +473,13 @@ struct ChatView: View {
             Image(systemName: "waveform")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(DS.Ink.rose)
-            Text(vm.partialTranscript?.isEmpty == false ? vm.partialTranscript! : "正在听…")
+            Text(vm.partialTranscript?.isEmpty == false ? vm.partialTranscript! : "Listening…")
                 .font(DS.mono(12, .regular))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
             Button { vm.stopListening() } label: {
-                Text("停止")
+                Text("Stop")
                     .font(DS.micro(10, .semibold))
                     .foregroundStyle(DS.Ink.rose)
             }
@@ -495,12 +495,12 @@ struct ChatView: View {
             Image(systemName: "speaker.wave.2.fill")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(DS.Ink.mint)
-            Text("正在朗读…")
+            Text("Speaking…")
                 .font(DS.mono(12, .regular))
                 .foregroundStyle(.secondary)
             Spacer()
             Button { vm.stopSpeaking() } label: {
-                Text("停止")
+                Text("Stop")
                     .font(DS.micro(10, .semibold))
                     .foregroundStyle(DS.Ink.mint)
             }
@@ -541,7 +541,7 @@ private struct PhotoAttachmentPicker: View {
     var body: some View {
         PhotosPicker(selection: $picks, maxSelectionCount: ChatViewModel.PendingAttachment.maxCount,
                      matching: .images) {
-            Text("选择图片")
+            Text("Pick image")
         }
         .onChange(of: picks) { items in
             show = false
@@ -597,7 +597,7 @@ private struct CameraAttachmentPicker: UIViewControllerRepresentable {
         func imagePickerController(_ picker: UIImagePickerController,
                                    didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let img = info[.originalImage] as? UIImage, let data = img.jpegData(compressionQuality: 0.85) {
-                parent.vm.addPendingAttachment(data: data, name: "拍照-\(Int(Date().timeIntervalSince1970)).jpg",
+                parent.vm.addPendingAttachment(data: data, name: "photo-\(Int(Date().timeIntervalSince1970)).jpg",
                                                mime: "image/jpeg")
             }
             parent.show = false

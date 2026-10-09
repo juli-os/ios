@@ -51,7 +51,7 @@ class Config: ObservableObject {
         azureRegion = UserDefaults.standard.string(forKey: Key.azureRegion) ?? "eastasia"
         azureKey = UserDefaults.standard.string(forKey: Key.azureKey) ?? ""
         commitPhrases = UserDefaults.standard.string(forKey: Key.commitPhrases)
-            ?? "请发送,我说完了,OK,好,就这样,可以了"
+            ?? "send it,i am done,that is all,OK,go ahead"
         // object(forKey:) so the first-launch default is `true`; bool(forKey:)
         // returns false for an unset key, which would wrongly disable VAD.
         vadEnabled = (UserDefaults.standard.object(forKey: Key.vadEnabled) as? Bool) ?? true

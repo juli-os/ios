@@ -21,13 +21,13 @@ struct FeedbackView: View {
             List {
                 // ---- 提交卡 ----
                 Section {
-                    TextField("所指（可选）：页面/单号/元素", text: $page)
+                    TextField("Ref (optional): page / ticket / element", text: $page)
                         .autocorrectionDisabled()
                     TextEditor(text: $body_)
                         .frame(minHeight: 88)
                         .overlay(alignment: .topLeading) {
                             if body_.isEmpty {
-                                Text("问题/建议：期望 vs 实际…")
+                                Text("Issue/suggestion: expected vs actual…")
                                     .foregroundStyle(.tertiary)
                                     .padding(.top, 8)
                                     .padding(.leading, 4)
@@ -35,14 +35,14 @@ struct FeedbackView: View {
                             }
                         }
                     HStack {
-                        TextField("署名", text: $author)
+                        TextField("Name", text: $author)
                             .frame(maxWidth: 110)
                             .autocorrectionDisabled()
                         Spacer()
                         Button {
                             Task { await submit() }
                         } label: {
-                            if submitting { ProgressView() } else { Text("提交并起单") }
+                            if submitting { ProgressView() } else { Text("Submit & open job") }
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(body_.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || submitting)
@@ -50,8 +50,8 @@ struct FeedbackView: View {
                     if let result {
                         Label(
                             result.intakeStatus == "started"
-                                ? "已起单 \(result.workflowId ?? result.recordId)——闸门批准前不动仓"
-                                : "未起单：\(result.intakeStatus)（记录已落墙）",
+                                ? "Job opened: \(result.workflowId ?? result.recordId) — the repo stays untouched until gate approval"
+                                : "No job: \(result.intakeStatus) (the record is on the wall)",
                             systemImage: result.intakeStatus == "started" ? "checkmark.circle.fill" : "info.circle"
                         )
                         .font(.footnote)
@@ -63,25 +63,25 @@ struct FeedbackView: View {
                             .foregroundStyle(.red)
                     }
                 } header: {
-                    Text("juli 自身反馈")
+                    Text("juli feedback")
                 } footer: {
-                    Text("进 juli-service 渠道：单落 juli-dev 会话，三段工件过闸门，批准后改仓+commit。")
+                    Text("Into the juli-service channel: the job lands in the juli-dev session, three-part artifacts pass the gate, approval edits the repo.")
                 }
 
                 // ---- 反馈墙（juli 自有渠道）----
                 Section {
                     if wallLoading {
-                        HStack { ProgressView(); Text("加载中…").foregroundStyle(.secondary) }
+                        HStack { ProgressView(); Text("Loading…").foregroundStyle(.secondary) }
                     } else {
                         if let wallError {
                             // 加载失败≠暂无记录：错误显式可见；存量记录照常展示。
-                            Label("加载失败：\(wallError)（下拉可重试）", systemImage: "exclamationmark.triangle.fill")
+                            Label("Load failed: \(wallError) (pull to retry)", systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
                                 .foregroundStyle(.red)
                         }
                         if wall.isEmpty {
                             if wallError == nil {
-                                Text("还没有记录").foregroundStyle(.secondary)
+                                Text("No records yet").foregroundStyle(.secondary)
                             }
                         } else {
                             ForEach(wall.filter { showReplies || $0.replyTo.isEmpty }) { rec in
@@ -94,14 +94,14 @@ struct FeedbackView: View {
                                         .background(statusTint(rec.status).opacity(0.15), in: Capsule())
                                         .foregroundStyle(statusTint(rec.status))
                                     if rec.replyTo.isEmpty != true {
-                                        Text("答复").font(.caption2).foregroundStyle(.secondary)
+                                        Text("Reply").font(.caption2).foregroundStyle(.secondary)
                                     }
                                     if rec.originKind == "agent" || rec.originKind == "engine" {
                                         Text("AI").font(.caption2.weight(.semibold))
                                             .padding(.horizontal, 5).padding(.vertical, 2)
                                             .background(Capsule().fill(.secondary.opacity(0.15)))
                                     }
-                                    Text((rec.source ?? "") == "juli-site" ? "官网" : "本地")
+                                    Text((rec.source ?? "") == "juli-site" ? "Site" : "Local")
                                         .font(.caption2).foregroundStyle(.tertiary)
                                     Spacer()
                                     Text(shortTime(rec.created)).font(.caption2).foregroundStyle(.tertiary)
@@ -116,13 +116,13 @@ struct FeedbackView: View {
                             }
                         }
                     }
-                    Toggle("显示答复", isOn: $showReplies)
+                    Toggle("Show reply", isOn: $showReplies)
                         .font(.footnote)
                 } header: {
-                    Text("反馈墙（juli 渠道）")
+                    Text("Feedback wall (juli channel)")
                 }
             }
-            .navigationTitle("反馈")
+            .navigationTitle("Feedback")
             .refreshable { await loadWall() }
             .task { await loadWall() }
         }
@@ -168,9 +168,9 @@ struct FeedbackView: View {
 
     private func statusTint(_ s: String) -> Color {
         switch s {
-        case "新建": return .blue
-        case "已采纳": return .orange
-        case "已完成": return .green
+        case "New": return .blue
+        case "Adopted": return .orange
+        case "Done": return .green
         default: return .secondary
         }
     }

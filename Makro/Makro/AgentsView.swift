@@ -160,7 +160,7 @@ struct AgentsView: View {
     @State private var meshDim: MeshDim = .company
     @State private var selectedRoute: APIClient.MeshRoute?
 
-    enum MeshDim: String, CaseIterable { case company = "按公司", domain = "按业务" }
+    enum MeshDim: String, CaseIterable { case company = "By company", domain = "By domain" }
 
     // 技能目录（2026-10-02 追溯一期）：第二层入口——页脚低调行进 sheet，
     // 不占第一层/右上角（浏览面不放主动作的 UX 裁决不变）。
@@ -180,17 +180,17 @@ struct AgentsView: View {
                 if !vm.loadedOnce {
                     VStack(spacing: 10) {
                         ProgressView()
-                        Text("连接组织图…")
+                        Text("Loading topology…")
                             .font(DS.mono(12)).foregroundStyle(.tertiary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if vm.profiles.isEmpty && vm.sessions.isEmpty && vm.errorMessage == nil {
                     VStack(spacing: 8) {
                         Image(systemName: "cpu").font(.system(size: 32)).foregroundStyle(.tertiary)
-                        Text("暂无执行中的 agent")
+                        Text("No agents running")
                             .font(.system(size: 14))
                             .foregroundStyle(.secondary)
-                        Text("业务流走到「执行」步骤时，这里会出现干活的 agent")
+                        Text("Agents appear here when a job reaches its execution step")
                             .font(.system(size: 12))
                             .foregroundStyle(.tertiary)
                     }
@@ -213,7 +213,7 @@ struct AgentsView: View {
                                 // 已有 profiles 但 graph 首拉在途（并行后窗口极短）。
                                 VStack(spacing: 10) {
                                     ProgressView()
-                                    Text("连接组织图…")
+                                    Text("Loading topology…")
                                         .font(DS.mono(12)).foregroundStyle(.tertiary)
                                 }
                                 .frame(maxWidth: .infinity)
@@ -221,7 +221,7 @@ struct AgentsView: View {
                             } else {
                                 // graph 确实拉不到 → 降级老卡流（含产物入口，
                                 // 见下方 onOpenArtifacts——Mesh 节点也有同款芯片）。
-                                Text("Agent Profiles · 常驻声明")
+                                Text("Agent profiles · declared")
                                     .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 ForEach(vm.rootProfiles) { p in
@@ -253,7 +253,7 @@ struct AgentsView: View {
                                 HStack(spacing: 5) {
                                     Image(systemName: "square.stack.3d.up")
                                         .font(.system(size: 10))
-                                    Text("技能目录")
+                                    Text("Skill catalog")
                                         .font(DS.mono(10))
                                 }
                                 .foregroundStyle(.secondary)
@@ -262,9 +262,9 @@ struct AgentsView: View {
                                 .clipShape(Capsule())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("技能目录")
+                            .accessibilityLabel("Skill catalog")
                             .padding(.bottom, 6)
-                            Text("点会话行 → 终端 · 点芯片 → 对应实体 · 无处可去的名字不存在")
+                            Text("Tap a session row → terminal · tap a chip → its entity · nothing dangles")
                                 .font(DS.mono(10)).foregroundStyle(.tertiary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 6)
@@ -291,7 +291,7 @@ struct AgentsView: View {
                         RoutingDagView()
                     } label: {
                         Image(systemName: "arrow.triangle.branch")
-                            .accessibilityLabel("路由图")
+                            .accessibilityLabel("Routing map")
                     }
                 }
                 // 设置入口 = tab 栏第 4 项 ⚙（板 02）；本页右上无主动作——
@@ -407,7 +407,7 @@ private struct ProfileCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(expanded ? "折叠 \(profile.name)" : "展开 \(profile.name)")
+            .accessibilityLabel(expanded ? "Collapse \(profile.name)" : "Expand \(profile.name)")
 
             if expanded {
                 // 声明区：cwd · model · 职责
@@ -432,7 +432,7 @@ private struct ProfileCard: View {
                     HStack(spacing: 6) {
                         Image(systemName: "doc.richtext")
                             .font(.system(size: 10, weight: .bold))
-                        Text(artifactCount.map { "它的产物 · \($0) 件" } ?? "它的产物")
+                        Text(artifactCount.map { "Its artifacts · \($0)" } ?? "Its artifacts")
                             .font(DS.mono(11, .semibold))
                         Spacer()
                         Image(systemName: "chevron.right")
@@ -445,10 +445,10 @@ private struct ProfileCard: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("查看 \(profile.name) 的产物")
+                .accessibilityLabel("View artifacts of \(profile.name)")
             } else {
                 // 折叠摘要（板 06）：一行 = 名 · runtime · cwd · N 会话
-                Text("\(profile.cwd ?? profile.name) · \(sessions.count) 会话")
+                Text("\(profile.cwd ?? profile.name) · \(sessions.count) sessions")
                     .font(DS.mono(11)).foregroundStyle(.tertiary).lineLimit(1)
             }
         }
@@ -476,7 +476,7 @@ private struct ActiveCaseChip: View {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.triangle.branch")
                     .font(.system(size: 10, weight: .bold))
-                Text("正在执行 · \(workflow.title)")
+                Text("Working · \(workflow.title)")
                     .font(DS.mono(11, .semibold)).lineLimit(1)
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -489,7 +489,7 @@ private struct ActiveCaseChip: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("打开正在执行的案卷 \(workflow.title)")
+        .accessibilityLabel("Open the running casefile \(workflow.title)")
         .padding(.leading, 12)
     }
 }
@@ -499,7 +499,7 @@ private struct OrphanSessionsCard: View {
     let sessions: [Session]
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("未归属会话 · \(sessions.count)")
+            Text("Unassigned sessions · \(sessions.count)")
                 .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
             ForEach(sessions) { s in
                 SessionNavRow(session: s)
@@ -573,8 +573,8 @@ private func meshGroups(g: APIClient.AgentsGraph, tops: [APIClient.MeshNode], di
                 .map { dom in (dom.name, mine.filter { $0.domain == dom.name }) }
                 .filter { !$0.1.isEmpty }
             let rest = mine.filter { n in !doms.contains { $0.0 == (n.domain ?? "") } }
-            if !rest.isEmpty { doms.append(("未分业务", rest)) }
-            return MeshGroup(title: company, subtitle: "\(mine.count) 会话", domains: doms)
+            if !rest.isEmpty { doms.append(("No domain", rest)) }
+            return MeshGroup(title: company, subtitle: "\(mine.count) sessions", domains: doms)
         }
     }
     let byDomain = Dictionary(grouping: tops.filter { !($0.domain ?? "").isEmpty }, by: { $0.domain ?? "" })
@@ -585,7 +585,7 @@ private func meshGroups(g: APIClient.AgentsGraph, tops: [APIClient.MeshNode], di
     // P2⑤：有公司无业务的节点不能因切维度消失——落「未分业务」组。
     let rest = tops.filter { ($0.domain ?? "").isEmpty }
     if !rest.isEmpty {
-        groups.append(MeshGroup(title: "未分业务", subtitle: "\(rest.count)", domains: [("未分业务", rest.sorted { $0.name < $1.name })]))
+        groups.append(MeshGroup(title: "No domain", subtitle: "\(rest.count)", domains: [("No domain", rest.sorted { $0.name < $1.name })]))
     }
     return groups
 }
@@ -628,7 +628,7 @@ private struct RecentDispatchChips: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Text("最近分发")
+                Text("Recent dispatches")
                     .font(DS.mono(10)).foregroundStyle(.tertiary)
                 ForEach(recent) { r in
                     Button {
@@ -649,7 +649,7 @@ private struct RecentDispatchChips: View {
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("回放分发 \(label(r))")
+                    .accessibilityLabel("Replay dispatch \(label(r))")
                 }
             }
         }
@@ -688,7 +688,7 @@ private struct MeshGroupCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(group.title) \(expanded ? "折叠" : "展开")")
+            .accessibilityLabel("\(group.title) \(expanded ? "Collapse" : "Expand")")
             if expanded {
                 ForEach(group.domains, id: \.name) { dom in
                     VStack(alignment: .leading, spacing: 6) {
@@ -777,16 +777,16 @@ private struct MeshNodeRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 5))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("查看 \(node.name) 的产物")
+                    .accessibilityLabel("View artifacts of \(node.name)")
                 }
                 // ② 标签行：绑定 / 默认 / 公司 / 克隆数——常驻占位保行高
                 //（wf_66a9b632154d 顺带：同行两卡高度不齐=条件渲染塌行，用户口令）。
                 HStack(spacing: 4) {
                     if node.isBound {
-                        meshTag("绑定", tint: DS.Ink.mint)
+                        meshTag("bound", tint: DS.Ink.mint)
                     }
                     if node.name == graph.defaultSession {
-                        meshTag("默认", tint: DS.Ink.zinc)
+                        meshTag("default", tint: DS.Ink.zinc)
                     }
                     if showCompanyTag, let c = node.company, !c.isEmpty {
                         meshTag(c, tint: DS.Ink.amber)
@@ -805,7 +805,7 @@ private struct MeshNodeRow: View {
                         HStack(spacing: 5) {
                             Image(systemName: "arrowtriangle.right.fill")
                                 .font(.system(size: 8, weight: .bold))
-                            Text("正在执行 · \(w.title)").lineLimit(1).truncationMode(.middle)
+                            Text("Working · \(w.title)").lineLimit(1).truncationMode(.middle)
                         }
                         .font(DS.mono(10, .semibold))
                         .foregroundStyle(DS.Ink.mintDeep)
@@ -815,7 +815,7 @@ private struct MeshNodeRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: DS.R.sm))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("打开正在执行的案卷 \(w.title)")
+                    .accessibilityLabel("Open the running casefile \(w.title)")
                   }
                 }
                 .frame(minHeight: 24, alignment: .leading) // 常驻行高，与标签行同法保齐
@@ -829,7 +829,7 @@ private struct MeshNodeRow: View {
             .clipShape(RoundedRectangle(cornerRadius: DS.R.btn, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("会话 \(node.name)")
+        .accessibilityLabel("Session \(node.name)")
     }
 
     private func meshTag(_ text: String, tint: Color) -> some View {
@@ -848,7 +848,7 @@ private struct UnassignedNodesCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("未归属 · \(nodes.count)    进图先声明（config.agents）")
+            Text("Unassigned · \(nodes.count)    declare them to enter the graph (config.agents)")
                 .font(DS.mono(10)).foregroundStyle(.tertiary)
             ForEach(nodes) { node in
                 NavigationLink(value: node.name) {
@@ -898,7 +898,7 @@ struct SkillsListView: View {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.system(size: 26))
                             .foregroundStyle(DS.Ink.amber)
-                        Text("技能目录加载失败")
+                        Text("Failed to load skill catalog")
                             .font(DS.text(13))
                             .foregroundStyle(.secondary)
                     }
@@ -919,11 +919,11 @@ struct SkillsListView: View {
                     .background(DS.Canvas.app.ignoresSafeArea())
                 }
             }
-            .navigationTitle("技能")
+            .navigationTitle("Skills")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
+                    Button("Done") { dismiss() }
                 }
             }
         }
@@ -955,10 +955,10 @@ struct SkillsListView: View {
 
     private func familyLabel(_ f: String) -> String {
         switch f {
-        case "juli": return "橘粒 · juli 系"
+        case "juli": return "Juli family"
         case "client": return "Client"
-        case "makro": return "Makro 系"
-        default: return "通用工具"
+        case "makro": return "Makro family"
+        default: return "General tools"
         }
     }
 }
@@ -993,7 +993,7 @@ private struct SkillRow: View {
                     .background(familyColor.opacity(0.1))
                     .clipShape(Capsule())
                 if skill.resident {
-                    Text("常驻")
+                    Text("Resident")
                         .font(DS.mono(9)).foregroundStyle(DS.Ink.slate)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(DS.Ink.slate.opacity(0.1))
@@ -1014,7 +1014,7 @@ private struct SkillRow: View {
             }
             HStack(spacing: 6) {
                 if skill.uses > 0 {
-                    Label("调用 \(skill.uses)", systemImage: "bolt.horizontal")
+                    Label("called \(skill.uses)×", systemImage: "bolt.horizontal")
                         .font(DS.mono(10)).foregroundStyle(.secondary)
                     if let ago = usedAgo {
                         Text("· \(ago)").font(DS.mono(10)).foregroundStyle(.tertiary)
@@ -1027,7 +1027,7 @@ private struct SkillRow: View {
                             .clipShape(Capsule())
                     }
                 } else {
-                    Text(skill.resident ? "每张任务卡必载（无调用语义）" : "尚未被调用")
+                    Text(skill.resident ? "Loaded with every task card (not a call)" : "Not called yet")
                         .font(DS.mono(10)).foregroundStyle(.tertiary)
                 }
                 Spacer()

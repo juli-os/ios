@@ -214,7 +214,7 @@ final class LifecycleViewModel: ObservableObject {
         defer { acting = false }
         do {
             try await APIClient.shared.approveScheduled(stepID: stepID, sendAt: date,
-                                                        note: "定时发送（iphone）")
+                                                        note: "Scheduled send (iphone)")
             await refresh()
         } catch { actionError = error.localizedDescription }
     }
@@ -225,7 +225,7 @@ final class LifecycleViewModel: ObservableObject {
         actionError = nil
         defer { acting = false }
         do {
-            try await APIClient.shared.cancelStep(stepID: stepID, note: "iphone 取消此步")
+            try await APIClient.shared.cancelStep(stepID: stepID, note: "iphone cancelled this step")
             await refresh()
         } catch { actionError = error.localizedDescription }
     }
@@ -338,9 +338,9 @@ struct LifecycleView: View {
                     // "nothing to approve" look the same.
                     if let gateErr = vm.gateError {
                         if vm.gates.isEmpty {
-                            ErrorBanner(text: "审批队列加载失败：\(gateErr)", tone: .rose)
+                            ErrorBanner(text: "Gate queue failed to load: \(gateErr)", tone: .rose)
                         } else {
-                            ErrorBanner(text: "审批队列刷新失败，显示上次数据（\(vm.gates.count) 条待批）", tone: .amber)
+                            ErrorBanner(text: "Gate refresh failed — showing last data (\(vm.gates.count) pending)", tone: .amber)
                         }
                     }
                     if !vm.gates.isEmpty {
@@ -382,7 +382,7 @@ struct LifecycleView: View {
                             .font(.system(size: 17, weight: .medium))
                             .foregroundStyle(DS.Ink.mint)
                     }
-                    .accessibilityLabel("发单")
+                    .accessibilityLabel("Intake")
                 }
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 6) {
@@ -442,21 +442,21 @@ struct LifecycleView: View {
                     .presentationDetents([.medium])
             }
             .confirmationDialog(
-                denyTarget.map { "驳回「\($0.step.displayTitle)」？" } ?? "驳回？",
+                denyTarget.map { "Reject \($0.step.displayTitle)?" } ?? "Reject?",
                 isPresented: Binding(
                     get: { denyTarget != nil },
                     set: { if !$0 { denyTarget = nil } }
                 ),
                 titleVisibility: .visible
             ) {
-                Button("确认驳回（流程终止）", role: .destructive) {
+                Button("Confirm rejection (terminates the run)", role: .destructive) {
                     if let item = denyTarget {
                         Task { await vm.deny(item) }
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button("Cancel", role: .cancel) {}
             } message: {
-                Text("流程标记失败并记录驳回原因；事后只能重开新流程。想改意见但继续走 → 用「回修」")
+                Text("The run is marked failed with the rejection reason; afterwards only a new run is possible. To give feedback and keep going, use Rework instead")
             }
         }
     }
@@ -468,26 +468,26 @@ struct LifecycleView: View {
             DashboardView()
         } label: {
             HStack(spacing: 10) {
-                headerStat(title: "今日 Token", value: dashTodayTokens,
-                           sub: "自然日 · 含缓存",
+                headerStat(title: "Tokens today", value: dashTodayTokens,
+                           sub: "calendar day · cache included",
                            cacheRate: dashCacheRate)
-                headerStat(title: "今日 Prompt", value: dashTodayPrompts,
-                           sub: "调用次数 · 计费口径")
-                headerStat(title: "今日 Workflow",
+                headerStat(title: "Prompts today", value: dashTodayPrompts,
+                           sub: "call count · billing basis")
+                headerStat(title: "Jobs today",
                            value: dashTodayWF < 0 ? "…" : "\(dashTodayWF)",
                            sub: dashTodayWF < 0 ? "" : wfDeltaSub)
-                headerStat(title: "总 Workflow",
+                headerStat(title: "Jobs total",
                            value: dashTotalWF < 0 ? "…" : "\(dashTotalWF)",
-                           sub: "累计全部单据")
+                           sub: "all time")
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("打开 Dashboard")
+        .accessibilityLabel("Open dashboard")
     }
 
     private var wfDeltaSub: String {
         let d = dashTodayWF - dashYesterdayWF
-        return d >= 0 ? "↑\(d) vs 昨日" : "↓\(-d) vs 昨日"
+        return d >= 0 ? "↑\(d) vs yesterday" : "↓\(-d) vs yesterday"
     }
 
     private func headerStat(title: String, value: String, sub: String, cacheRate: String? = nil) -> some View {
@@ -535,14 +535,14 @@ struct ReworkSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("驳回「\(item.step.displayTitle)」")
+                    Text("Reject \(item.step.displayTitle)")
                         .font(DS.display(16, .bold))
 
-                    Text("修改意见（必填）")
+                    Text("What to change (required)")
                         .font(DS.mono(11, .semibold)).foregroundStyle(DS.Ink.mintDeep)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        TextField("要改什么…", text: $feedback, axis: .vertical)
+                        TextField("What should change…", text: $feedback, axis: .vertical)
                             .font(DS.text(12.5))
                             .lineLimit(4...8)
                             .padding(10)
@@ -554,7 +554,7 @@ struct ReworkSheet: View {
                                 .font(DS.mono(9))
                                 .foregroundStyle(trimmed.count > 500 ? DS.Ink.rose : Color.secondary.opacity(0.6))
                         }
-                        Text("空意见会被本地拦截：只说驳回不说改什么，agent 无从回修")
+                        Text("An empty note is blocked locally — reject without saying what to change and the agent has nothing to rework")
                             .font(DS.mono(9.5)).foregroundStyle(.secondary)
                     }
                     .padding(12)
@@ -570,39 +570,39 @@ struct ReworkSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
 
-                    actionRow(icon: "arrow.uturn.backward", title: "回修",
-                              subtitle: "意见注入前一步重做 · 轮次 +1 · 流程不断",
+                    actionRow(icon: "arrow.uturn.backward", title: "Rework",
+                              subtitle: "Note injected into the previous step · round +1 · run continues",
                               fill: Color(red: 0.992, green: 0.945, blue: 0.902),
                               border: Color(red: 0.922, green: 0.835, blue: 0.737),
                               fg: DS.Ink.mintDeep) {
                         submit { try await vm.reworkThrowing(stepID: item.step.id, feedback: trimmed) }
                     }
 
-                    actionRow(icon: "square.and.pencil", title: "方向修正",
-                              subtitle: "人定稿入档为 amendment · 流程继续",
+                    actionRow(icon: "square.and.pencil", title: "Course amendment",
+                              subtitle: "Your final wording is filed as an amendment · run continues",
                               fill: DS.Canvas.inset, border: Color.secondary.opacity(0.15),
                               fg: .primary) {
                         submit { try await vm.alignThrowing(stepID: item.step.id, amendment: trimmed) }
                     }
 
-                    actionRow(icon: "xmark", title: "强制驳回",
-                              subtitle: "流程终止 · 已完成部分留档",
+                    actionRow(icon: "xmark", title: "Force reject",
+                              subtitle: "Terminates the run · finished parts stay on record",
                               fill: DS.Canvas.card,
                               border: Color(red: 0.910, green: 0.780, blue: 0.761),
                               fg: DS.Ink.rose) {
                         submit { try await vm.denyThrowing(item, note: trimmed) }
                     }
 
-                    Text("三个动作都写账本（by: iphone）。只想否掉不走流程的用最后一个")
+                    Text("All three actions hit the ledger (by: iphone). Use the last one only to kill the run")
                         .font(DS.mono(9.5)).foregroundStyle(.secondary)
                 }
                 .padding(20)
             }
             .background(DS.Canvas.app.ignoresSafeArea())
-            .navigationTitle("驳回")
+            .navigationTitle("Reject")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .topBarTrailing) { Button("Cancel") { dismiss() } }
             }
             .presentationDetents([.medium, .large])
         }
@@ -613,7 +613,7 @@ struct ReworkSheet: View {
                            action: @escaping () -> Void) -> some View {
         Button {
             guard !trimmed.isEmpty else {
-                errorText = "修改意见不能为空——只说驳回不说改什么，agent 无从回修"
+                errorText = "Note cannot be empty — reject without saying what to change and the agent has nothing to rework"
                 return
             }
             action()
@@ -678,7 +678,7 @@ private struct GateQueueSection: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Circle().fill(DS.Ink.amber).frame(width: 7, height: 7)
-                Text("待我审批 · \(gates.count)")
+                Text("Awaiting my approval · \(gates.count)")
                     .font(DS.display(15, .semibold))
             }
             ForEach(gates) { item in
@@ -739,7 +739,7 @@ private struct GateCard: View {
                         }
                     }
                     if checkFailed {
-                        Text("前置检查未通过 — 请驳回回修，不要批准")
+                        Text("Pre-send checks failed — reject to rework, do not approve")
                             .font(DS.mono(11, .semibold))
                             .foregroundStyle(DS.Ink.rose)
                     }
@@ -752,7 +752,7 @@ private struct GateCard: View {
             // ── 审批内容 ──
             if item.step.bodyInline != nil || item.step.bodyRef != nil || !deliverables.isEmpty || item.step.fallbackBody != nil {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("审批内容")
+                    Text("For review")
                         .font(DS.display(12, .semibold))
                         .foregroundStyle(.secondary)
                     if let inline = item.step.bodyInline {
@@ -763,7 +763,7 @@ private struct GateCard: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(DS.Canvas.app)
                             .clipShape(RoundedRectangle(cornerRadius: DS.R.sm))
-                        Button(bodyExpanded ? "收起" : "展开全文") {
+                        Button(bodyExpanded ? "Collapse" : "Expand") {
                             withAnimation(DS.snappy) { bodyExpanded.toggle() }
                         }
                         .font(DS.mono(11, .semibold))
@@ -777,14 +777,14 @@ private struct GateCard: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(DS.Canvas.app)
                             .clipShape(RoundedRectangle(cornerRadius: DS.R.sm))
-                        Button(bodyExpanded ? "收起" : "展开全文") {
+                        Button(bodyExpanded ? "Collapse" : "Expand") {
                             withAnimation(DS.snappy) { bodyExpanded.toggle() }
                         }
                         .font(DS.mono(11, .semibold))
                         .tint(DS.Ink.mint)
                     }
                     if let ref = item.step.bodyRef {
-                        ContentRow(label: "待批正文", name: ref.name, bytes: nil) {
+                        ContentRow(label: "Draft body", name: ref.name, bytes: nil) {
                             onPreview(PreviewTarget(id: ref.id, name: ref.name))
                         }
                     }
@@ -792,7 +792,7 @@ private struct GateCard: View {
                         // body_ref 已单列时跳过同名 body 工件，避免重复行。
                         if let id = d.id, !(item.step.bodyRef != nil && d.viewRole == "body") {
                             ContentRow(
-                                label: d.viewRole == "body" ? "正文" : "交付物",
+                                label: d.viewRole == "body" ? "Body" : "Deliverables",
                                 name: d.name,
                                 bytes: d.bytes
                             ) {
@@ -809,7 +809,7 @@ private struct GateCard: View {
                     .lineLimit(6)
             }
             HStack(spacing: 8) {
-                TextField("备注（可选）", text: $note)
+                TextField("Note (optional)", text: $note)
                     .font(.system(size: 13))
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 8)
@@ -828,7 +828,7 @@ private struct GateCard: View {
                 .buttonStyle(.borderedProminent)
                 .tint(DS.Ink.mint)
                 .disabled(vm.acting || checkFailed)
-                .accessibilityLabel("批准")
+                .accessibilityLabel("Approve")
                 Button {
                     onDeny(item)
                 } label: {
@@ -838,7 +838,7 @@ private struct GateCard: View {
                 .buttonStyle(.bordered)
                 .tint(.red)
                 .disabled(vm.acting)
-                .accessibilityLabel("驳回")
+                .accessibilityLabel("Reject")
                 Button {
                     onRework(item)
                 } label: {
@@ -848,14 +848,14 @@ private struct GateCard: View {
                 .buttonStyle(.bordered)
                 .tint(.orange)
                 .disabled(vm.acting)
-                .accessibilityLabel("驳回回修")
+                .accessibilityLabel("Reject & rework")
                 Button {
                     Task {
                         await vm.resolve(item, note: note)
                         note = ""
                     }
                 } label: {
-                    Text("已处理")
+                    Text("Handled")
                         .font(.system(size: 12, weight: .semibold))
                 }
                 .buttonStyle(.bordered)
@@ -947,8 +947,8 @@ private struct CostAnalysisSection: View {
                 withAnimation(DS.snappy) { expanded.toggle() }
             } label: {
                 HStack(spacing: 8) {
-                    Text("费用分析").font(DS.display(14, .semibold)).foregroundStyle(DS.Ink.mintDeep)
-                    Text("每单 API 等效成本 × 价位分布").font(DS.mono(10)).foregroundStyle(.tertiary)
+                    Text("Cost analysis").font(DS.display(14, .semibold)).foregroundStyle(DS.Ink.mintDeep)
+                    Text("Per-job API-equivalent cost × tier mix").font(DS.mono(10)).foregroundStyle(.tertiary)
                     Spacer()
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 11, weight: .medium)).foregroundStyle(.tertiary)
@@ -956,7 +956,7 @@ private struct CostAnalysisSection: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(expanded ? "收起费用分析" : "展开费用分析")
+            .accessibilityLabel(expanded ? "Collapse cost analysis" : "Expand cost analysis")
             if expanded { content }
         }
         .padding(12)
@@ -971,11 +971,11 @@ private struct CostAnalysisSection: View {
 
     @ViewBuilder private var content: some View {
         if let s = stats {
-            Picker("时段", selection: $days) {
-                Text("7 天").tag(7)
-                Text("30 天").tag(30)
-                Text("90 天").tag(90)
-                Text("全部").tag(0)
+            Picker("Period", selection: $days) {
+                Text("7d").tag(7)
+                Text("30d").tag(30)
+                Text("90d").tag(90)
+                Text("All").tag(0)
             }
             .pickerStyle(.segmented)
             .onChange(of: days) { _ in Task { await load() } }
@@ -990,7 +990,7 @@ private struct CostAnalysisSection: View {
         } else {
             HStack(spacing: 8) {
                 ProgressView()
-                Text("读取费用数据…").font(DS.mono(11)).foregroundStyle(.tertiary)
+                Text("Loading cost data…").font(DS.mono(11)).foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)
         }
@@ -1001,16 +1001,16 @@ private struct CostAnalysisSection: View {
         do {
             stats = try await APIClient.shared.fetchCostStats(days: days)
         } catch {
-            loadError = "费用数据读取失败：\(error.localizedDescription)"
+            loadError = "Cost data failed to load: \(error.localizedDescription)"
         }
     }
 
     private func kpiRow(_ s: CostStats) -> some View {
         HStack(spacing: 8) {
-            kpi("总成本", Self.cny(s.overall.totalCny), "\(s.overall.ordersWithCost)/\(s.overall.workflows) 单有计价")
-            kpi("单均", Self.cny(s.overall.meanCny), "中位 \(Self.cny(s.overall.medianCny))")
-            kpi("P90", Self.cny(s.overall.p90Cny), "最贵 \(Self.cny(s.overall.maxCny))")
-            kpi("无计费用量", "\(s.overall.zeroCostOrders)", "归属盲区+纯闸门单")
+            kpi("Total", Self.cny(s.overall.totalCny), "\(s.overall.ordersWithCost)/\(s.overall.workflows) jobs priced")
+            kpi("Per job", Self.cny(s.overall.meanCny), "median \(Self.cny(s.overall.medianCny))")
+            kpi("P90", Self.cny(s.overall.p90Cny), "max \(Self.cny(s.overall.maxCny))")
+            kpi("Unpriced usage", "\(s.overall.zeroCostOrders)", "unattributed + gate-only jobs")
         }
     }
 
@@ -1033,11 +1033,11 @@ private struct CostAnalysisSection: View {
             ForEach(s.buckets, id: \.label) { b in
                 ForEach(b.byModel, id: \.model) { m in
                     BarMark(
-                        x: .value("价位", b.label),
-                        y: .value("单量", m.count),
+                        x: .value("Tier", b.label),
+                        y: .value("Jobs", m.count),
                         stacking: .standard
                     )
-                    .foregroundStyle(by: .value("模型", m.label))
+                    .foregroundStyle(by: .value("Model", m.label))
                     .cornerRadius(3)
                 }
             }
@@ -1050,9 +1050,9 @@ private struct CostAnalysisSection: View {
     }
 
     private func footnoteText(_ s: CostStats) -> String {
-        var l = "口径：每单 usageCost 加总（bigmodel 价目 \(s.pricingRetrievedAt ?? "—") 快照，cache/input/output 三价）；已取消单计入；\(days == 0 ? "全时段" : "近 \(days) 天")。"
+        var l = "Basis: per-job usageCost summed (BigModel list \(s.pricingRetrievedAt ?? "—") snapshot; cache/input/output rates; cancelled jobs included; \(days == 0 ? "All time" : "last \(days) days")。"
         if let unpriced = s.unpricedOrders, !unpriced.isEmpty {
-            l += " \(unpriced.count) 单含不在价目的模型（只计用量不出价）。"
+            l += " \(unpriced.count) jobs use models outside the price list (usage counted, not priced)."
         }
         return l
     }
@@ -1086,13 +1086,13 @@ private struct WorkflowListSection: View {
     @State private var appearedCards: Set<String> = []
 
     enum StatusFilter: String, CaseIterable, Identifiable {
-        case all = "全部"
-        case queued = "排队中"
-        case live = "进行中"
-        case waiting = "待审批"
-        case failed = "失败"
-        case completed = "完成"
-        case settled = "已取消"
+        case all = "All"
+        case queued = "Queued"
+        case live = "Running"
+        case waiting = "In review"
+        case failed = "Failed"
+        case completed = "Completed"
+        case settled = "Cancelled"
         var id: String { label }
         var label: String { rawValue }
     }
@@ -1148,25 +1148,25 @@ private struct WorkflowListSection: View {
                     Button {
                         newestFirst = true
                     } label: {
-                        Label("最新优先", systemImage: newestFirst ? "checkmark" : "")
+                        Label("Newest first", systemImage: newestFirst ? "checkmark" : "")
                     }
                     Button {
                         newestFirst = false
                     } label: {
-                        Label("最早优先", systemImage: newestFirst ? "" : "checkmark")
+                        Label("Oldest first", systemImage: newestFirst ? "" : "checkmark")
                     }
                 } label: {
                     Image(systemName: "arrow.up.arrow.down")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
-                .accessibilityLabel("排序")
+                .accessibilityLabel("Sort")
             }
             filterChips
             if workflows.isEmpty {
                 Text(vm.errorMessage == nil
-                     ? "暂无业务流 — 新邮件进入后出现在这里"
-                     : "列表加载失败：\(vm.errorMessage ?? "")")
+                     ? "No jobs yet — new email lands here"
+                     : "List failed to load: \(vm.errorMessage ?? "")")
                     .font(.system(size: 13))
                     .foregroundStyle(vm.errorMessage == nil ? Color.secondary : DS.Ink.rose)
                     .padding(12)
@@ -1174,7 +1174,7 @@ private struct WorkflowListSection: View {
                     .background(DS.Canvas.inset)
                     .clipShape(RoundedRectangle(cornerRadius: DS.R.md))
             } else if displayList.isEmpty {
-                Text("没有符合「\(filter.label)」的 workflow")
+                Text("No jobs match \(filter.label)")
                     .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
                     .padding(10)
@@ -1251,13 +1251,13 @@ enum FlowStatus {
 
     static func label(_ s: String) -> String {
         switch s {
-        case "queued": return "排队中"
-        case "running": return "进行中"
-        case "waiting_human": return "待审批"
-        case "failed": return "失败"
-        case "completed": return "完成"
-        case "cancelled": return "已取消"
-        case "rejected": return "已驳回"
+        case "queued": return "Queued"
+        case "running": return "Running"
+        case "waiting_human": return "In review"
+        case "failed": return "Failed"
+        case "completed": return "Completed"
+        case "cancelled": return "Cancelled"
+        case "rejected": return "Rejected"
         default: return s
         }
     }
@@ -1349,7 +1349,7 @@ private struct WorkflowCard: View {
             let f = DateFormatter(); f.dateFormat = "HH:mm"
             return f.string(from: date)
         }
-        if cal.isDateInYesterday(date) { return "昨天" }
+        if cal.isDateInYesterday(date) { return "Yesterday" }
         let f = DateFormatter(); f.dateFormat = "MM-dd"
         return f.string(from: date)
     }
@@ -1409,7 +1409,7 @@ struct WorkflowDetailSheet: View {
                                 onPurge: { purgeArmed = true }
                             )
                             if let steps = tree.steps, !steps.isEmpty {
-                                Text("阶梯").font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
+                                Text("Tier").font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 8) {
                                     ForEach(Array(steps.enumerated()), id: \.element.id) { idx, st in
                                         // 先算布尔再传槽——三元内联在 ViewBuilder 里
@@ -1431,7 +1431,7 @@ struct WorkflowDetailSheet: View {
                                     }
                                     HStack(spacing: 6) {
                                         Image(systemName: "bubble.left").font(.system(size: 9))
-                                        Text("长按执行中的步骤可插话 · 意见留痕并续心跳")
+                                        Text("Long-press a running step to intervene · notes are traced and keep the heartbeat alive")
                                     }
                                     .font(DS.mono(9.5)).foregroundStyle(DS.Ink.mintDeep)
                                     .padding(8)
@@ -1450,10 +1450,10 @@ struct WorkflowDetailSheet: View {
                     }
                 } else if let err = vm.selectedError {
                     VStack(spacing: 10) {
-                        Text("加载失败").font(.system(size: 15, weight: .semibold))
+                        Text("Failed to load").font(.system(size: 15, weight: .semibold))
                         Text(err).font(DS.mono(12)).foregroundStyle(DS.Ink.rose)
                             .multilineTextAlignment(.center)
-                        Button("重试") {
+                        Button("Retry") {
                             Task { await vm.select(workflowID) }
                         }
                         .buttonStyle(.borderedProminent)
@@ -1479,71 +1479,71 @@ struct WorkflowDetailSheet: View {
             }
             // 办结确认。
             .confirmationDialog(
-                "办结「\(settleTarget?.title ?? "")」？",
+                "Settle \(settleTarget?.title ?? "")?",
                 isPresented: Binding(get: { settleTarget != nil }, set: { if !$0 { settleTarget = nil } }),
                 titleVisibility: .visible
             ) {
-                Button("办结（结算为完成）") {
+                Button("Settle (as completed)") {
                     if let w = settleTarget { Task { await vm.settle(w.id) } }
                 }
-                Button("取消", role: .cancel) {}
+                Button("Cancel", role: .cancel) {}
             } message: {
-                Text("nodes 模式的显式结算；有在飞步会被拒绝并说明原因")
+                Text("Explicit settle for nodes mode; rejected with a reason if steps are in flight")
             }
             // 取消此步确认。
             .confirmationDialog(
-                "取消该步骤？",
+                "Cancel this step?",
                 isPresented: Binding(get: { cancelStepID != nil }, set: { if !$0 { cancelStepID = nil } }),
                 titleVisibility: .visible
             ) {
-                Button("取消此步（不牵连整单）", role: .destructive) {
+                Button("Cancel this step (job unaffected)", role: .destructive) {
                     if let id = cancelStepID { Task { await vm.cancelStep(id) } }
                 }
-                Button("取消", role: .cancel) {}
+                Button("Cancel", role: .cancel) {}
             } message: {
-                Text("仅未开跑的步合法；output 标记 + 审计事件，什么都不删")
+                Text("Only steps that have not started are eligible; the output is marked + an audit event is written, nothing is deleted")
             }
             // 补正重发意见。
-            .alert("补正重发", isPresented: Binding(
+            .alert("Amend & resend", isPresented: Binding(
                 get: { reworkSendID != nil }, set: { if !$0 { reworkSendID = nil } })) {
-                TextField("要补正什么…", text: $reworkSendText)
-                Button("重发") {
+                TextField("What to amend…", text: $reworkSendText)
+                Button("Resend") {
                     if let id = reworkSendID, !reworkSendText.trimmingCharacters(in: .whitespaces).isEmpty {
                         Task { await vm.reworkSend(id, feedback: reworkSendText) }
                     }
                     reworkSendText = ""
                 }
-                Button("取消", role: .cancel) { reworkSendText = "" }
+                Button("Cancel", role: .cancel) { reworkSendText = "" }
             } message: {
-                Text("意见交 agent 补正后重过发送闸门")
+                Text("The agent amends per your note, then re-enters the send gate")
             }
             // 重试改指令。
-            .alert("重试并改指令", isPresented: Binding(
+            .alert("Retry with new instructions", isPresented: Binding(
                 get: { retryPlanID != nil }, set: { if !$0 { retryPlanID = nil } })) {
-                TextField("这次让它怎么做…", text: $retryPlanText)
-                Button("重试") {
+                TextField("How should it run this time…", text: $retryPlanText)
+                Button("Retry") {
                     if let id = retryPlanID, !retryPlanText.trimmingCharacters(in: .whitespaces).isEmpty {
                         Task { await vm.retryWithPlan(id, plan: retryPlanText) }
                     }
                     retryPlanText = ""
                 }
-                Button("取消", role: .cancel) { retryPlanText = "" }
+                Button("Cancel", role: .cancel) { retryPlanText = "" }
             } message: {
-                Text("plan 覆写原指令；会话不变")
+                Text("The plan overrides the original instructions; session unchanged")
             }
-            .alert("驳回回修", isPresented: Binding(
+            .alert("Reject & rework", isPresented: Binding(
                 get: { reworkStepID != nil },
                 set: { if !$0 { reworkStepID = nil } })) {
-                TextField("要改什么…", text: $reworkFeedback)
-                Button("确认回修") {
+                TextField("What should change…", text: $reworkFeedback)
+                Button("Confirm rework") {
                     if let id = reworkStepID, !reworkFeedback.trimmingCharacters(in: .whitespaces).isEmpty {
                         Task { await vm.rework(stepID: id, feedback: reworkFeedback) }
                     }
                     reworkFeedback = ""
                 }
-                Button("取消", role: .cancel) { reworkFeedback = "" }
+                Button("Cancel", role: .cancel) { reworkFeedback = "" }
             } message: {
-                Text("feedback 将注入前一步重做，轮次 +1，流程不断")
+                Text("The feedback is injected into the previous step, round +1, run continues")
             }
             .sheet(item: $previewTarget) { target in
                 CaseArtifactPreview(target: target)
@@ -1559,8 +1559,8 @@ struct WorkflowDetailSheet: View {
                     )
                 }
             }
-            .confirmationDialog("清理该案全部附件字节？", isPresented: $purgeArmed, titleVisibility: .visible) {
-                Button("清理字节（事实留档）", role: .destructive) {
+            .confirmationDialog("Purge all attachment bytes for this case?", isPresented: $purgeArmed, titleVisibility: .visible) {
+                Button("Purge bytes (facts stay on record)", role: .destructive) {
                     Task {
                         do {
                             try await vm.purgeCaseArtifacts(workflowID)
@@ -1569,45 +1569,45 @@ struct WorkflowDetailSheet: View {
                         }
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button("Cancel", role: .cancel) {}
             } message: {
-                Text("磁盘/OSS 上的文件内容删除；账本中的事实与元数据保留")
+                Text("File contents on disk/OSS are deleted; facts and metadata stay in the ledger")
             }
-            .alert("清理失败", isPresented: Binding(
+            .alert("Purge failed", isPresented: Binding(
                 get: { purgeError != nil },
                 set: { if !$0 { purgeError = nil }
                 })) {
-                Button("好", role: .cancel) {}
+                Button("OK", role: .cancel) {}
             } message: {
                 Text(purgeError ?? "")
             }
             .confirmationDialog(
-                "强制关闭「\(closeTarget?.title ?? "")」？",
+                "Force close \(closeTarget?.title ?? "")?",
                 isPresented: Binding(
                     get: { closeTarget != nil },
                     set: { if !$0 { closeTarget = nil } }
                 ),
                 titleVisibility: .visible
             ) {
-                Button("强制关闭（在途步全部取消）", role: .destructive) {
+                Button("Force close (all in-flight steps cancelled)", role: .destructive) {
                     if let w = closeTarget {
                         Task {
                             do {
-                                try await vm.forceClose(w.id, note: "iphone 强制关闭")
+                                try await vm.forceClose(w.id, note: "iphone force-closed")
                             } catch {
                                 closeError = error.localizedDescription
                             }
                         }
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button("Cancel", role: .cancel) {}
             } message: {
-                Text("流水立即终局，不再等任何闸门；已完成的事实留账本")
+                Text("The run ends immediately, waiting for no gate; finished facts stay in the ledger")
             }
-            .alert("关闭失败", isPresented: Binding(
+            .alert("Close failed", isPresented: Binding(
                 get: { closeError != nil },
                 set: { if !$0 { closeError = nil } })) {
-                Button("好", role: .cancel) {}
+                Button("OK", role: .cancel) {}
             } message: {
                 Text(closeError ?? "")
             }
@@ -1625,16 +1625,16 @@ struct WorkflowDetailSheet: View {
                 interveneStep = st
             } label: {
                 if let sess = st.sessionName(in: w) {
-                    Label("插话纠偏 @\(sess)", systemImage: "bubble.left")
+                    Label("Intervene @\(sess)", systemImage: "bubble.left")
                 } else {
-                    Label("插话纠偏", systemImage: "bubble.left")
+                    Label("Intervene", systemImage: "bubble.left")
                 }
             }
             if let sess = st.sessionName(in: w) {
                 Button {
                     terminalSession = sess
                 } label: {
-                    Label("在终端打开 @\(sess)", systemImage: "terminal")
+                    Label("Open in terminal @\(sess)", systemImage: "terminal")
                 }
             }
         }
@@ -1642,7 +1642,7 @@ struct WorkflowDetailSheet: View {
             Button {
                 reworkStepID = st.id
             } label: {
-                Label("驳回回修", systemImage: "arrow.uturn.backward")
+                Label("Reject & rework", systemImage: "arrow.uturn.backward")
             }
         }
         // 定时发送：发送闸门批准时定档（默认明早 09:00，时差礼仪）。
@@ -1651,7 +1651,7 @@ struct WorkflowDetailSheet: View {
             Button {
                 Task { await vm.scheduleApprove(stepID: st.id, at: Self.tomorrow9am()) }
             } label: {
-                Label("定时发送（明早 9:00）", systemImage: "clock.badge.checkmark")
+                Label("Scheduled (tomorrow 9:00)", systemImage: "clock.badge.checkmark")
             }
         }
         // 单步取消：不牵连整单（仅未开跑步合法，服务端校验）。
@@ -1659,7 +1659,7 @@ struct WorkflowDetailSheet: View {
             Button(role: .destructive) {
                 cancelStepID = st.id
             } label: {
-                Label("取消此步", systemImage: "minus.circle")
+                Label("Cancel step", systemImage: "minus.circle")
             }
         }
         // send 守卫拒发后的补正通道。
@@ -1667,7 +1667,7 @@ struct WorkflowDetailSheet: View {
             Button {
                 reworkSendID = st.id
             } label: {
-                Label("补正重发", systemImage: "arrowshape.turn.up.right")
+                Label("Amend & resend", systemImage: "arrowshape.turn.up.right")
             }
         }
         // 重试并改指令：agent/verify 失败步的干预重试。
@@ -1675,7 +1675,7 @@ struct WorkflowDetailSheet: View {
             Button {
                 retryPlanID = st.id
             } label: {
-                Label("重试并改指令", systemImage: "square.and.pencil")
+                Label("Retry with new instructions", systemImage: "square.and.pencil")
             }
         }
         // 补料：缺 input 的失败步，引擎预填候选值。
@@ -1683,7 +1683,7 @@ struct WorkflowDetailSheet: View {
             Button {
                 amendStep = st
             } label: {
-                Label("补料（修正输入重跑）", systemImage: "tray.and.arrow.down")
+                Label("Amend inputs (edit & rerun)", systemImage: "tray.and.arrow.down")
             }
         }
     }
@@ -1724,7 +1724,7 @@ struct WorkflowDetailSheet: View {
                         .clipShape(Capsule())
                 }
                 if w.auto_approve == true {
-                    Text("⚡ 自动批准中")
+                    Text("⚡ Auto-approving")
                         .font(DS.mono(9, .semibold))
                         .foregroundStyle(DS.Ink.mintDeep)
                         .padding(.horizontal, 6).padding(.vertical, 2)
@@ -1756,17 +1756,17 @@ struct WorkflowDetailSheet: View {
                         .foregroundStyle(DS.Ink.amber)
                     ForEach(uc.byModel, id: \.model) { m in
                         Text(m.priced
-                             ? "\(m.label) \(m.free ? "免费" : String(format: "≈¥%.2f", m.costCny.total))"
-                             : "\(m.model)·无价目")
+                             ? "\(m.label) \(m.free ? "Free" : String(format: "≈¥%.2f", m.costCny.total))"
+                             : "\(m.model)·unpriced")
                             .foregroundStyle(m.priced ? DS.Ink.mintDeep : .secondary)
                             .help(m.priced
-                                  ? String(format: "cache ¥%.4f + input ¥%.4f + output ¥%.4f（档位：%@）", m.costCny.cache, m.costCny.input, m.costCny.output, m.tiersHit?.joined(separator: " / ") ?? "")
-                                  : "不在智谱价目内——只计用量不出价")
+                                  ? String(format: "cache ¥%.4f + input ¥%.4f + output ¥%.4f (tier: %@)", m.costCny.cache, m.costCny.input, m.costCny.output, m.tiersHit?.joined(separator: " / ") ?? "")
+                                  : "not in the BigModel price list — usage counted, not priced")
                     }
                     if uc.totalCny.total > 0 {
-                        Text(String(format: "· 合计 ≈¥%.2f", uc.totalCny.total))
+                        Text(String(format: "· total ≈¥%.2f", uc.totalCny.total))
                             .foregroundStyle(DS.Ink.amber)
-                            .help(String(format: "cache ¥%.4f + input ¥%.4f + output ¥%.4f（价目 %@）", uc.totalCny.cache, uc.totalCny.input, uc.totalCny.output, uc.pricingRetrievedAt ?? ""))
+                            .help(String(format: "cache ¥%.4f + input ¥%.4f + output ¥%.4f (list %@)", uc.totalCny.cache, uc.totalCny.input, uc.totalCny.output, uc.pricingRetrievedAt ?? ""))
                     }
                 }
                 .font(DS.mono(11))
@@ -1775,7 +1775,7 @@ struct WorkflowDetailSheet: View {
             // Email origin: which message started this case (from/subject
             // copied into meta by the engine at intake).
             if let from = w.meta?["from"]?.stringValue, !from.isEmpty {
-                Text("来信 · \(w.meta?["subject"]?.stringValue ?? "（无主题）") · \(from)")
+                Text("Inbound · \(w.meta?["subject"]?.stringValue ?? "(no subject)") · \(from)")
                     .font(DS.mono(11))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -1787,7 +1787,7 @@ struct WorkflowDetailSheet: View {
                         Button {
                             terminalSession = s
                         } label: {
-                            Label(isAssigned ? "@\(s) 执行" : "@\(s)", systemImage: "terminal")
+                            Label(isAssigned ? "working @\(s)" : "@\(s)", systemImage: "terminal")
                                 .font(DS.mono(11, .semibold))
                                 .padding(.horizontal, 8).padding(.vertical, 5)
                                 .background((isAssigned ? DS.Ink.mint : Color.secondary).opacity(0.12))
@@ -1795,7 +1795,7 @@ struct WorkflowDetailSheet: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("在终端打开 @\(s)")
+                        .accessibilityLabel("Open in terminal @\(s)")
                     }
                     // 单子级免批切换（2026-10-07）：开=立即触发服务端 sweep。
                     if w.status == "running" || w.status == "queued" || w.status == "waiting_human" {
@@ -1807,10 +1807,10 @@ struct WorkflowDetailSheet: View {
                                 do {
                                     try await vm.setAutoApprove(w.id, on: !autoOn)
                                     await vm.reloadSelected()
-                                } catch { vm.actionError = "免批切换失败：\(error.localizedDescription)" }
+                                } catch { vm.actionError = "Auto-approve toggle failed: \(error.localizedDescription)" }
                             }
                         } label: {
-                            Label(autoOn ? "需批" : "免批", systemImage: autoOn ? "person.crop.circle" : "bolt.badge.automatic")
+                            Label(autoOn ? "review" : "auto", systemImage: autoOn ? "person.crop.circle" : "bolt.badge.automatic")
                                 .font(DS.mono(11, .semibold))
                                 .padding(.horizontal, 8).padding(.vertical, 5)
                                 .background((autoOn ? DS.Ink.zinc : DS.Ink.mint).opacity(0.12))
@@ -1819,14 +1819,14 @@ struct WorkflowDetailSheet: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(isTogglingAutoApprove)
-                        .accessibilityLabel(autoOn ? "恢复人工批准" : "本单免批（非发送闸门自动批准）")
+                        .accessibilityLabel(autoOn ? "Restore human approval" : "Auto-approve this job (non-send gates)")
                     }
                     // 终局逃生舱：running 流水随时可强制关闭（在途步全取消）。
                     if w.status == "running" {
                         Button {
                             settleTarget = w
                         } label: {
-                            Label("办结", systemImage: "checkmark.seal")
+                            Label("Settle", systemImage: "checkmark.seal")
                                 .font(DS.mono(11, .semibold))
                                 .padding(.horizontal, 8).padding(.vertical, 5)
                                 .background(DS.Ink.done.opacity(0.12))
@@ -1834,11 +1834,11 @@ struct WorkflowDetailSheet: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("办结该流水")
+                        .accessibilityLabel("Settle this run")
                         Button {
                             closeTarget = w
                         } label: {
-                            Label("强制关闭", systemImage: "xmark.octagon")
+                            Label("Force close", systemImage: "xmark.octagon")
                                 .font(DS.mono(11, .semibold))
                                 .padding(.horizontal, 8).padding(.vertical, 5)
                                 .background(DS.Ink.rose.opacity(0.12))
@@ -1846,13 +1846,13 @@ struct WorkflowDetailSheet: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("强制关闭该流水")
+                        .accessibilityLabel("Force-close this run")
                     }
                     if w.status == "failed" {
                         Button {
-                            Task { await vm.closeFailed(w.id, note: "iphone 收口") }
+                            Task { await vm.closeFailed(w.id, note: "iphone close-out") }
                         } label: {
-                            Label("收口", systemImage: "archivebox")
+                            Label("Close out", systemImage: "archivebox")
                                 .font(DS.mono(11, .semibold))
                                 .padding(.horizontal, 8).padding(.vertical, 5)
                                 .background(DS.Ink.zinc.opacity(0.14))
@@ -1860,13 +1860,13 @@ struct WorkflowDetailSheet: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("收口该失败案卷")
+                        .accessibilityLabel("Close out this failed casefile")
                     }
                     if w.status != "running" {
                         Button {
                             followUpFrom = w
                         } label: {
-                            Label("跟进单", systemImage: "arrow.triangle.branch")
+                            Label("Follow-up", systemImage: "arrow.triangle.branch")
                                 .font(DS.mono(11, .semibold))
                                 .padding(.horizontal, 8).padding(.vertical, 5)
                                 .background(DS.Ink.mint.opacity(0.12))
@@ -1874,7 +1874,7 @@ struct WorkflowDetailSheet: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("发起跟进单")
+                        .accessibilityLabel("Start a follow-up")
                     }
                 }
             }
@@ -1903,10 +1903,10 @@ private struct CaseArtifactsSection: View {
     var body: some View {
         // 板 05：Section 头平铺底色 + 独立白卡（List 形态已随容器重写退役）。
         VStack(alignment: .leading, spacing: 8) {
-            Text("附件与产出 · \(artifacts.count)")
+            Text("Attachments & outputs · \(artifacts.count)")
                 .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
             if artifacts.isEmpty {
-                Text("暂无附件与产出")
+                Text("No attachments or outputs")
                     .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
                     .padding(12)
@@ -1924,7 +1924,7 @@ private struct CaseArtifactsSection: View {
                         .buttonStyle(.plain)
                     }
                     Button(role: .destructive, action: onPurge) {
-                        Text("清理附件字节（事实留档）").font(.system(size: 13))
+                        Text("Purge attachment bytes (facts stay)").font(.system(size: 13))
                     }
                 }
                 .padding(12)
@@ -1960,7 +1960,7 @@ struct CaseArtifactPreview: View {
             Group {
                 switch state {
                 case .loading:
-                    ProgressView("加载中…")
+                    ProgressView("Loading…")
                 case .html(let html):
                     HTMLPreviewView(html: html)
                 case .video(let url):
@@ -2002,7 +2002,7 @@ struct CaseArtifactPreview: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
+                    Button("Completed") { dismiss() }
                 }
             }
             .task { await load() }
@@ -2013,7 +2013,7 @@ struct CaseArtifactPreview: View {
         // 大附件闸：手机上拉 50MB+ 的 PPTX 既慢也吃内存——劝退到桌面端。
         if let b = target.bytes, b > 50 * 1024 * 1024 {
             let size = ByteCountFormatter.string(fromByteCount: b, countStyle: .file)
-            await MainActor.run { state = .failed("文件过大（\(size)）——建议在桌面端查看") }
+            await MainActor.run { state = .failed("File too large (\(size)) — best viewed on desktop") }
             return
         }
         do {
@@ -2044,7 +2044,7 @@ struct CaseArtifactPreview: View {
                 await MainActor.run { state = .text(txt) }
             } else {
                 let kb = ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)
-                await MainActor.run { state = .failed("该类型（\(mime)）暂不支持预览 · \(kb)") }
+                await MainActor.run { state = .failed("No preview for this type (\(mime)) · \(kb)") }
             }
         } catch {
             await MainActor.run { state = .failed(error.localizedDescription) }
@@ -2148,13 +2148,13 @@ private struct ArtifactRow: View {
             }
             Spacer()
             if artifact.isPurged {
-                Text("已清理").font(DS.mono(9)).foregroundStyle(.secondary)
+                Text("Purged").font(DS.mono(9)).foregroundStyle(.secondary)
             } else if artifact.hasBytes {
                 Image(systemName: "doc.text.magnifyingglass")
                     .font(.system(size: 14))
                     .foregroundStyle(DS.Ink.mint)
             } else {
-                Text("超限未存").font(DS.mono(9)).foregroundStyle(.secondary)
+                Text("Over limit, not stored").font(DS.mono(9)).foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 2)
@@ -2185,11 +2185,11 @@ private struct StepTimelineRow: View {
 
     var statusLabel: String {
         switch step.status {
-        case "waiting_human": return "待审批"
-        case "running": return "执行中"
-        case "completed": return "完成"
-        case "failed": return "失败"
-        case "pending": return "等待"
+        case "waiting_human": return "In review"
+        case "running": return "Running"
+        case "completed": return "Completed"
+        case "failed": return "Failed"
+        case "pending": return "Waiting"
         default: return step.status
         }
     }
@@ -2242,7 +2242,7 @@ private struct StepTimelineRow: View {
                         .lineLimit(4)
                 }
                 // Why it failed: the engine stashes the reason on output.error;
-                // a bare "重试" without the reason just retries blind.
+                // a bare "Retry" without the reason just retries blind.
                 if let err = step.outputError {
                     Text(err)
                         .font(.system(size: 11))
@@ -2255,16 +2255,16 @@ private struct StepTimelineRow: View {
                 if step.status == "failed" {
                     HStack(spacing: 8) {
                         if step.kind == "send", let onReworkSend {
-                            repairButton("补正重发", icon: "arrowshape.turn.up.right", action: onReworkSend)
+                            repairButton("Amend & resend", icon: "arrowshape.turn.up.right", action: onReworkSend)
                         }
                         if step.kind == "agent" || step.kind == "verify", let onRetryPlan {
-                            repairButton("重试并改指令", icon: "square.and.pencil", action: onRetryPlan)
+                            repairButton("Retry with new instructions", icon: "square.and.pencil", action: onRetryPlan)
                         }
                         if step.kind != "send", let onAmend {
-                            repairButton("补料", icon: "tray.and.arrow.down", action: onAmend)
+                            repairButton("Amend inputs", icon: "tray.and.arrow.down", action: onAmend)
                         }
                         Button(action: onRetry) {
-                            Label("原样重试", systemImage: "arrow.clockwise")
+                            Label("Retry as-is", systemImage: "arrow.clockwise")
                                 .font(DS.mono(10, .semibold))
                                 .foregroundStyle(.secondary)
                         }
@@ -2279,7 +2279,7 @@ private struct StepTimelineRow: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 10))
                                 .foregroundStyle(DS.Ink.mint)
-                            Text("已发送至 \(receipt.to)")
+                            Text("Sent to \(receipt.to)")
                                 .font(DS.mono(11, .semibold))
                                 .foregroundStyle(DS.Ink.mint)
                         }
@@ -2289,7 +2289,7 @@ private struct StepTimelineRow: View {
                                 .foregroundStyle(.tertiary)
                         }
                         if !receipt.attachments.isEmpty {
-                            Text("随信附件：\(receipt.attachments.joined(separator: "、"))")
+                            Text("Attachments: \(receipt.attachments.joined(separator: "、"))")
                                 .font(DS.mono(10))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(3)
@@ -2300,16 +2300,16 @@ private struct StepTimelineRow: View {
                     HStack(spacing: 8) {
                         if let sess = session, let cb = onTerminal {
                             Button { cb(sess) } label: {
-                                Label("终端", systemImage: "terminal")
+                                Label("Terminal", systemImage: "terminal")
                                     .font(.system(size: 11, weight: .semibold))
                             }
                             .buttonStyle(.bordered)
                             .tint(DS.Ink.mint)
                             .controlSize(.mini)
-                            .accessibilityLabel("在终端打开 @\(sess)")
+                            .accessibilityLabel("Open in terminal @\(sess)")
                         }
                         if step.status == "failed" {
-                            Button("重试", action: onRetry)
+                            Button("Retry", action: onRetry)
                                 .font(.system(size: 12, weight: .semibold))
                         }
                     }
@@ -2401,24 +2401,24 @@ private struct RouteChainCard: View {
             let from = or(w.meta?["from"]?.stringValue)
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("链路 · 本单在 mesh 里走的路")
+                    Text("Route · this job’s path through the mesh")
                         .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
                     Spacer()
                     if fallback {
                         // 板F 落回徽标：终点跳被引擎改道时在标题旁点名。
                         HStack(spacing: 3) {
                             Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 9))
-                            Text("已落回")
+                            Text("fell back")
                         }
                             .font(DS.mono(9, .semibold)).foregroundStyle(DS.Ink.amber)
                     }
                 }
                 VStack(alignment: .leading, spacing: 0) {
-                    routeHop(icon: "envelope", title: "来信", value: from, hot: true, reason: reasons?[0])
+                    routeHop(icon: "envelope", title: "Inbound", value: from, hot: true, reason: reasons?[0])
                     hopConnector
-                    routeHop(icon: "circle.fill", title: "公司", value: company, hot: true, reason: reasons?[1])
+                    routeHop(icon: "circle.fill", title: "Company", value: company, hot: true, reason: reasons?[1])
                     hopConnector
-                    routeHop(icon: "diamond.fill", title: "业务", value: domain, hot: true, reason: reasons?[2])
+                    routeHop(icon: "diamond.fill", title: "Domain", value: domain, hot: true, reason: reasons?[2])
                     hopConnector
                     // 终点跳：橙底收尾——一眼看到本单落进哪个会话；
                     // 落回时改琥珀底 + ⚠「落回」，实落会话盖过判定会话（板F）。
@@ -2429,7 +2429,7 @@ private struct RouteChainCard: View {
                             .background(fallback ? DS.Ink.amber : DS.Ink.mint)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(fallback ? "会话 · 判定 \(or(w.meta?["route_session"]?.stringValue))" : "会话")
+                            Text(fallback ? "Session · judged \(or(w.meta?["route_session"]?.stringValue))" : "Session")
                                 .font(DS.mono(9)).foregroundStyle(.tertiary)
                             Text(fallback ? (w.session ?? judgedSession) : judgedSession)
                                 .font(DS.mono(13, .semibold))
@@ -2439,10 +2439,10 @@ private struct RouteChainCard: View {
                         if fallback {
                             HStack(spacing: 3) {
                                 Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 9))
-                                Text("落回")
+                                Text("fallback")
                             }.font(DS.mono(9, .semibold)).foregroundStyle(DS.Ink.amber)
                         } else {
-                            Text(chain[3] == "bound" ? "绑定直通" : "默认路由")
+                            Text(chain[3] == "bound" ? "bound direct" : "default route")
                                 .font(DS.mono(9)).foregroundStyle(chain[3] == "bound" ? DS.Ink.mintDeep : Color.secondary)
                         }
                     }
@@ -2453,7 +2453,7 @@ private struct RouteChainCard: View {
                 if let reasons {
                     // route_decision 原文（板F「可展开」）：链路 + 四条原因，
                     // 纯投影已落账的 meta，不再二次请求。
-                    DisclosureGroup("route_decision · 原文") {
+                    DisclosureGroup("route_decision · raw") {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(chain.joined(separator: " → "))
                                 .font(DS.mono(9)).foregroundStyle(.secondary)

@@ -165,7 +165,7 @@ enum EmlPreview {
 
     static func parse(_ raw: String) -> View {
         guard let cut = raw.range(of: "\r\n\r\n") ?? raw.range(of: "\n\n") else {
-            return View(subject: "(空邮件)", from: "", to: "", cc: "", date: "", text: "", html: "", attachments: [], rawSizeLabel: "0 B")
+            return View(subject: "(empty message)", from: "", to: "", cc: "", date: "", text: "", html: "", attachments: [], rawSizeLabel: "0 B")
         }
         let headers = Headers(String(raw[..<cut.lowerBound]))
         let body = String(raw[cut.upperBound...])
@@ -173,7 +173,7 @@ enum EmlPreview {
         collect(headers, body: body, into: &acc, depth: 0)
         let decode = decodeMimeWords
         return View(
-            subject: decode(headers.value("subject")).isEmpty ? "(无主题)" : decode(headers.value("subject")),
+            subject: decode(headers.value("subject")).isEmpty ? "(no subject)" : decode(headers.value("subject")),
             from: decode(headers.value("from")),
             to: decode(headers.value("to")),
             cc: decode(headers.value("cc")),
@@ -195,7 +195,7 @@ enum EmlPreview {
                 .replacingOccurrences(of: ">", with: "&gt;")
         }
         var rows = ""
-        for (k, val) in [("主题", v.subject), ("发件人", v.from), ("收件人", v.to), ("抄送", v.cc), ("时间", v.date)] where !val.isEmpty {
+        for (k, val) in [("Subject", v.subject), ("From", v.from), ("To", v.to), ("Cc", v.cc), ("Time", v.date)] where !val.isEmpty {
             rows += "<div class='row'><span class='k'>\(k)</span><span class='v'>\(esc(val))</span></div>"
         }
         let atts = v.attachments.isEmpty ? "" :
@@ -206,7 +206,7 @@ enum EmlPreview {
         } else if !v.html.isEmpty {
             body = "<iframe sandbox srcdoc=\"\(esc(v.html).replacingOccurrences(of: "\"", with: "&quot;"))\"></iframe>"
         } else {
-            body = "<p class='muted'>(无可读正文部件)</p>"
+            body = "<p class='muted'>(no readable body part)</p>"
         }
         return """
         <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>

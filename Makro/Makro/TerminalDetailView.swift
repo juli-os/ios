@@ -47,7 +47,7 @@ struct TerminalDetailView: View {
                     } label: {
                         HStack(spacing: 3) {
                             Image(systemName: "arrow.triangle.branch").font(.system(size: 8, weight: .bold))
-                            Text("正在执行 · \(t)").lineLimit(1)
+                            Text("Working · \(t)").lineLimit(1)
                         }
                         .font(DS.mono(9, .semibold))
                         .foregroundStyle(DS.Ink.mintDeep)
@@ -128,11 +128,11 @@ struct TerminalDetailView: View {
             ToolbarItem(placement: .topBarLeading) {
                 if let onClose {
                     Button(action: onClose) {
-                        Label("关闭", systemImage: "xmark")
+                        Label("Close", systemImage: "xmark")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
-                    .accessibilityLabel("关闭终端")
+                    .accessibilityLabel("Close terminal")
                 }
             }
             ToolbarItem(placement: .principal) {
@@ -222,7 +222,7 @@ struct TerminalDetailView: View {
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
-                        Text("会话")
+                        Text("Session")
                             .font(DS.display(15, .semibold))
                         Text("\(drawerSessions.count)")
                             .font(DS.mono(12, .semibold))

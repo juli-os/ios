@@ -36,7 +36,7 @@ struct TaskComposerView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if let relatesTo, !relatesTo.isEmpty {
-                        Label("跟进自 \(relatesTo.prefix(14))…（因果链入账）", systemImage: "arrow.triangle.branch")
+                        Label("Follows \(relatesTo.prefix(14))… (causal chain in the ledger)", systemImage: "arrow.triangle.branch")
                             .font(DS.mono(10, .semibold))
                             .foregroundStyle(DS.Ink.mintDeep)
                             .padding(.horizontal, 8).padding(.vertical, 4)
@@ -44,24 +44,24 @@ struct TaskComposerView: View {
                             .clipShape(Capsule())
                     }
                     // 标题：首句自动生成，可改
-                    Text("标题 · 首句自动生成，可改")
+                    Text("Title · auto-generated, editable")
                         .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
-                    TextField("给这单起个名字…", text: $title, onEditingChanged: { titleEdited = $0 })
+                    TextField("Name this job…", text: $title, onEditingChanged: { titleEdited = $0 })
                         .font(DS.text(14, .semibold))
                         .padding(.horizontal, 12).padding(.vertical, 10)
                         .background(DS.Canvas.card)
                         .clipShape(RoundedRectangle(cornerRadius: DS.R.md, style: .continuous))
 
                     // 转写正文
-                    Text("内容 · 语音转写结果，点文字可修")
+                    Text("Content · voice transcript, tap to edit")
                         .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 6) {
                             Circle().fill(transcript.isEmpty ? DS.Ink.zinc : DS.Ink.done)
                                 .frame(width: 7, height: 7)
                             Text(transcript.isEmpty
-                                 ? (isListening ? "正在听…" : "点下方麦克风开始说")
-                                 : "✓ 转写完成 · \(charCount) 字")
+                                 ? (isListening ? "Listening…" : "Tap the mic below to start")
+                                 : "✓ Transcribed · \(charCount) chars")
                                 .font(DS.mono(10)).foregroundStyle(.secondary)
                             Spacer()
                             if isListening, case .listening(let partial) = speech.listenState, !partial.isEmpty {
@@ -77,12 +77,12 @@ struct TaskComposerView: View {
                             .padding(8)
                             .background(DS.Canvas.card)
                             .clipShape(RoundedRectangle(cornerRadius: DS.R.md, style: .continuous))
-                        Text("转写：Azure Speech（设置里已配）")
+                        Text("Transcription: Azure Speech (configured in Settings)")
                             .font(DS.mono(9)).foregroundStyle(Color.secondary.opacity(0.6))
                     }
 
                     if let micError {
-                        ErrorLine(text: micError + " · 手打仍可用")
+                        ErrorLine(text: micError + " · typing still works")
                     }
                     if let errorText {
                         ErrorLine(text: errorText)
@@ -91,7 +91,7 @@ struct TaskComposerView: View {
                     // 发单即接手提示
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle").font(.system(size: 12))
-                        Text("发单即接手 · 首节点自动播种 · 到闸门会停下来等你")
+                        Text("Handed off on create · first node seeded · stops at the gate for you")
                     }
                     .font(DS.mono(10)).foregroundStyle(DS.Ink.mintDeep)
                     .padding(10)
@@ -103,17 +103,17 @@ struct TaskComposerView: View {
             }
             .background(DS.Canvas.app.ignoresSafeArea())
             .safeAreaInset(edge: .bottom) { micBar }
-            .navigationTitle("发单")
+            .navigationTitle("Create job")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { stopMic(); dismiss() }
+                    Button("Cancel") { stopMic(); dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         submit()
                     } label: {
-                        if submitting { ProgressView().controlSize(.small) } else { Text("发起 →") }
+                        if submitting { ProgressView().controlSize(.small) } else { Text("Go →") }
                     }
                     .font(DS.text(14, .semibold))
                     .disabled(submitting || title.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -135,16 +135,16 @@ struct TaskComposerView: View {
                         Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
-                    .accessibilityLabel("取消录音")
+                    .accessibilityLabel("Cancel recording")
                     Text(elapsedLabel).font(DS.mono(12, .semibold)).foregroundStyle(DS.Ink.mintDeep)
                     WaveformView(active: isListening)
-                    Text("点 mic 结束").font(DS.mono(9)).foregroundStyle(.secondary)
+                    Text("Tap mic to finish").font(DS.mono(9)).foregroundStyle(.secondary)
                 }
                 .frame(height: 34)
             } else {
                 HStack(spacing: 3) {
                     Image(systemName: "keyboard").font(.system(size: 10))
-                    Text("手打永远可用")
+                    Text("Typing always works")
                 }.font(DS.mono(9)).foregroundStyle(.secondary)
             }
             Button {
@@ -156,7 +156,7 @@ struct TaskComposerView: View {
             }
             .background(Circle().fill(DS.Ink.mint))
             .breathing(isListening)
-            .accessibilityLabel(isListening ? "结束录音" : "开始录音")
+            .accessibilityLabel(isListening ? "Stop recording" : "Start recording")
         }
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
@@ -173,7 +173,7 @@ struct TaskComposerView: View {
     private func toggleMic() {
         if isListening { stopMic(); return }
         guard speech.isConfigured else {
-            micError = "语音未配置（设置 → 语音：Azure 区域/密钥）"
+            micError = "Voice not configured (Settings → Voice: Azure region/key)"
             return
         }
         micError = nil
@@ -218,7 +218,7 @@ struct TaskComposerView: View {
     private func submit() {
         let t = title.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else {
-            errorText = "标题必填——说一句话，标题会自动生成"
+            errorText = "Title required — speak a sentence and it is generated"
             return
         }
         submitting = true

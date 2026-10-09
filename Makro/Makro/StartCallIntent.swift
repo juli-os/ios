@@ -100,9 +100,9 @@ struct MakroShortcuts: AppShortcutsProvider {
                 // Shortcuts app as runnable phrases. Add a zh-Hans
                 // Localizable.strings to make them voice-trained.
                 // 避开"打给"（系统拨号）。
-                "用 \(.applicationName) 开始通话",
-                "开始 \(.applicationName) 通话",
-                "\(.applicationName) 通话"
+                "Start a \(.applicationName) call",
+                "Start \(.applicationName) call",
+                "\(.applicationName) call"
             ],
             shortTitle: "Start Call",
             systemImageName: "phone.fill"
@@ -121,8 +121,8 @@ struct MakroShortcuts: AppShortcutsProvider {
                 // won't voice-match them; Shortcuts-app-visible only until a
                 // zh-Hans Localizable.strings is added.
                 // 避开"挂断"（系统挂断词）。
-                "结束 \(.applicationName) 通话",
-                "停止 \(.applicationName) 通话"
+                "End \(.applicationName) call",
+                "Stop \(.applicationName) call"
             ],
             shortTitle: "End Call",
             systemImageName: "phone.down.fill"

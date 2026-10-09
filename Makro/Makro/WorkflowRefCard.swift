@@ -67,11 +67,11 @@ struct WorkflowRefCard: View {
 
     private var statusLabel: String {
         switch wf?.status {
-        case "running": return "进行中"
-        case "queued": return "排队"
-        case "completed": return "已完成"
-        case "failed": return "失败"
-        case "cancelled": return "已取消"
+        case "running": return "Running"
+        case "queued": return "Queued"
+        case "completed": return "Completed"
+        case "failed": return "Failed"
+        case "cancelled": return "Cancelled"
         default: return "…"
         }
     }
@@ -89,7 +89,7 @@ struct WorkflowRefCard: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(DS.Ink.mintDeep)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(failed ? "单子 \(wfID)" : (wf?.title ?? "读取单子…"))
+                        Text(failed ? "Job \(wfID)" : (wf?.title ?? "Loading job…"))
                             .font(DS.text(13.5, .semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
@@ -113,7 +113,7 @@ struct WorkflowRefCard: View {
                             HStack(spacing: 3) {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.system(size: 10, weight: .semibold))
-                                Text("跟进")
+                                Text("Follow up")
                                     .font(DS.mono(10, .semibold))
                             }
                             .foregroundStyle(DS.Ink.mintDeep)
@@ -123,7 +123,7 @@ struct WorkflowRefCard: View {
                             .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("基于单子 \(wf?.title ?? wfID) 创建跟进任务")
+                        .accessibilityLabel("Create a follow-up from job \(wf?.title ?? wfID)")
                     }
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .bold))
@@ -131,7 +131,7 @@ struct WorkflowRefCard: View {
                 }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("打开单子 \(wf?.title ?? wfID) 的产物")
+            .accessibilityLabel("Open artifacts of job \(wf?.title ?? wfID)")
 
             // 三导航入口（wf_430649acd604）：📋 Workflow 过程 / 🗂 Artifact 结果 /
             // 👤 Agents 执行现场（该单 resolved session 的终端——谁在干、干到哪）。
@@ -143,7 +143,7 @@ struct WorkflowRefCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: "list.bullet.rectangle")
                             .font(.system(size: 10.5, weight: .semibold))
-                        Text("详情")
+                        Text("Details")
                             .font(DS.text(12, .semibold))
                     }
                     .foregroundStyle(DS.Ink.mintDeep)
@@ -153,7 +153,7 @@ struct WorkflowRefCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("查看单子 \(wf?.title ?? wfID) 详情")
+                .accessibilityLabel("View job \(wf?.title ?? wfID) details")
 
                 Button {
                     DeepLinkRouter.shared.artifactsProducer = wfID
@@ -161,7 +161,7 @@ struct WorkflowRefCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: "square.grid.2x2")
                             .font(.system(size: 10.5, weight: .semibold))
-                        Text("产物")
+                        Text("Artifacts")
                             .font(DS.text(12, .semibold))
                     }
                     .foregroundStyle(DS.Ink.mintDeep)
@@ -171,7 +171,7 @@ struct WorkflowRefCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("打开单子 \(wf?.title ?? wfID) 的产物")
+                .accessibilityLabel("Open artifacts of job \(wf?.title ?? wfID)")
 
                 Button {
                     // 执行现场：DeepLinkRouter.session → Agents tab + path=[session]
@@ -183,7 +183,7 @@ struct WorkflowRefCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: "person.wave.2")
                             .font(.system(size: 10.5, weight: .semibold))
-                        Text(wf?.session?.isEmpty == false ? "现场" : "未派发")
+                        Text(wf?.session?.isEmpty == false ? "Live" : "Not dispatched")
                             .font(DS.text(12, .semibold))
                     }
                     .foregroundStyle((wf?.session?.isEmpty == false) ? DS.Ink.mintDeep : Color.secondary.opacity(0.5))
@@ -194,7 +194,7 @@ struct WorkflowRefCard: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(wf?.session?.isEmpty != false)
-                .accessibilityLabel("查看单子 \(wf?.title ?? wfID) 的执行现场")
+                .accessibilityLabel("View the live execution of job \(wf?.title ?? wfID)")
             }
         }
         .padding(.horizontal, 12)

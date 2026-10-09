@@ -20,14 +20,14 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 // 分组（板 12 · 设置与通知）：连接 / 语音 / 通知
-                groupLabel("连接")
+                groupLabel("Connection")
                 serverCard
                 authCard
-                groupLabel("语音 · 发单与插话转写")
+                groupLabel("Voice — intake & intervene transcription")
                 azureCard
                 voiceCard
                 quotaCard
-                groupLabel("通知")
+                groupLabel("Notifications")
                 notifyCard
                 testCard
                 infoCard
@@ -55,10 +55,10 @@ struct SettingsView: View {
                 .foregroundStyle(DS.Ink.mint)
             }
         }
-        .alert("服务器地址无效", isPresented: $showInvalidURL) {
-            Button("好", role: .cancel) {}
+        .alert("Invalid server address", isPresented: $showInvalidURL) {
+            Button("OK", role: .cancel) {}
         } message: {
-            Text("请填写形如 https://host:port 的地址（不能含空格或非法字符）。")
+            Text("Enter an address like https://host:port (no spaces or invalid characters).")
         }
         .onAppear { quotaTracker.reload() }
     }
@@ -80,13 +80,13 @@ struct SettingsView: View {
                 Image(systemName: "bell.badge")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.tertiary)
-                Text("闸门等待 / 会话完成 推送")
+                Text("Gate waiting / session done")
                     .font(DS.text(13, .regular))
                     .foregroundStyle(.primary)
                 Spacer()
                 Circle().fill(DS.Ink.done).frame(width: 8, height: 8)
             }
-            Text("点推送直达对应案卷/终端（深链）；回前台自动清空通知中心与角标。")
+            Text("Tapping a push deep-links to the casefile/terminal; returning to the app clears notifications and the badge.")
                 .font(DS.text(11, .regular))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -243,12 +243,12 @@ struct SettingsView: View {
 
     private var voiceCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionLabel("语音交互")
+            sectionLabel("Voice")
             HStack(spacing: 10) {
                 Image(systemName: "checkmark.message")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.tertiary)
-                TextField("请发送,我说完了,OK,好", text: $config.commitPhrases)
+                TextField("send it,i am done,OK,that is all", text: $config.commitPhrases)
                     .font(DS.mono(13, .regular))
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -263,7 +263,7 @@ struct SettingsView: View {
                 Image(systemName: "waveform.badge.checkmark")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.tertiary)
-                Text("VAD 智能降噪（省额度）")
+                Text("VAD smart gating (saves quota)")
                     .font(DS.text(13, .regular))
                     .foregroundStyle(.primary)
                 Spacer()
@@ -276,7 +276,7 @@ struct SettingsView: View {
             .clipShape(RoundedRectangle(cornerRadius: DS.R.md, style: .continuous))
             .glassBorder(DS.R.md)
 
-            Text("开启后：只有检测到说话时才消耗语音识别额度；说完结束语（如「请发送」）才发送。")
+            Text("When on, speech-recognition quota is consumed only while you are talking; the turn is sent after a commit phrase (e.g. ‘send it’).")
                 .font(DS.text(11, .regular))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -292,27 +292,27 @@ struct SettingsView: View {
     private var quotaCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                sectionLabel("本月额度 (F0 免费层)")
+                sectionLabel("This month (F0 free tier)")
                 Spacer()
                 Button {
                     quotaTracker.reset()
                 } label: {
-                    Text("重置")
+                    Text("Reset")
                         .font(DS.micro(10, .semibold))
                         .foregroundStyle(.secondary)
                 }
             }
 
             quotaRow(
-                label: "语音合成 (TTS)",
+                label: "Text-to-speech (TTS)",
                 used: "\(quotaTracker.quota.ttsCharsUsed)",
-                limit: "\(SpeechQuota.ttsCap) 字符",
+                limit: "\(SpeechQuota.ttsCap) chars",
                 ratio: quotaTracker.quota.ttsRatio
             )
             quotaRow(
-                label: "语音识别 (STT)",
+                label: "Speech-to-text (STT)",
                 used: String(format: "%.1f", Double(quotaTracker.quota.sttSecondsUsed) / 3600.0),
-                limit: String(format: "%.1f", Double(SpeechQuota.sttCapSeconds) / 3600.0) + " 小时",
+                limit: String(format: "%.1f", Double(SpeechQuota.sttCapSeconds) / 3600.0) + " h",
                 ratio: quotaTracker.quota.sttRatio
             )
         }
@@ -427,7 +427,7 @@ struct SettingsView: View {
         // 服务器提示并入一行（原英文占位文案按设计替换）。
         HStack(spacing: 6) {
             Text("Makro \(appVersion) (\(buildNumber)) · juli-service")
-            Text("· 服务器需可达")
+            Text("· server must be reachable")
         }
         .font(DS.mono(11))
         .foregroundStyle(.tertiary)

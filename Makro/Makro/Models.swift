@@ -411,10 +411,10 @@ struct CaseArtifact: Codable, Identifiable, Equatable {
     }
     var roleLabel: String {
         switch role {
-        case "intake_attachment": return "来信附件"
-        case "agent_output": return "执行产出"
-        case "draft_attachment": return "回信附件"
-        case "case_journey": return "结案流程图"
+        case "intake_attachment": return "Inbound attachment"
+        case "agent_output": return "Execution output"
+        case "draft_attachment": return "Reply attachment"
+        case "case_journey": return "Closing flow"
         default: return role
         }
     }
@@ -528,7 +528,7 @@ extension LifecycleStep {
     var bodyRef: (id: String, name: String)? {
         guard let d = input?["body_ref"]?.dictValue,
               let id = d["id"]?.stringValue, !id.isEmpty else { return nil }
-        return (id, d["name"]?.stringValue ?? "正文")
+        return (id, d["name"]?.stringValue ?? "Body")
     }
 
     /// Server stashes the failure reason on `output.error` (engine.go / capabilities).

@@ -67,11 +67,11 @@ final class ChatViewModel: NSObject, ObservableObject {
     /// 托盘加入（入口统一走这里）：限大小/件数，超限就地报系统气泡。
     func addPendingAttachment(data: Data, name: String, mime: String) {
         if data.count > PendingAttachment.maxBytes {
-            appendMessage(.system, "[附件「\(name)」超过 10MB，未添加]")
+            appendMessage(.system, "[Attachment ‘\(name)’ is over 10MB — not added]")
             return
         }
         guard pendingAttachments.count < PendingAttachment.maxCount else {
-            appendMessage(.system, "[一条消息最多 \(PendingAttachment.maxCount) 个附件]")
+            appendMessage(.system, "[At most \(PendingAttachment.maxCount) attachments per message]")
             return
         }
         pendingAttachments.append(PendingAttachment(data: data, name: name, mime: mime))
@@ -221,7 +221,7 @@ final class ChatViewModel: NSObject, ObservableObject {
         // so the hint teaches the pause-to-send behavior.
         speech.onMaxDurationHint = { [weak self] in
             _ = self
-            NowPlayingManager.shared.updatePhase("说话有点久 — 停顿一下即发送")
+            NowPlayingManager.shared.updatePhase("Long utterance — pause to send")
         }
     }
 
@@ -379,7 +379,7 @@ final class ChatViewModel: NSObject, ObservableObject {
         let outgoing = pendingAttachments
         guard !trimmed.isEmpty || !outgoing.isEmpty else { return }
         pendingAttachments = []
-        let displayText = trimmed.isEmpty ? "[附件 \(outgoing.count) 件]" : trimmed
+        let displayText = trimmed.isEmpty ? "[\(outgoing.count) attachments]" : trimmed
         // 无附件：保持乐观先上屏（原行为）；有附件：上传成功才上屏（气泡
         // 需携带服务端回填的附件元数据），上传期间靠 streaming 指示器占位。
         if outgoing.isEmpty {
@@ -446,7 +446,7 @@ final class ChatViewModel: NSObject, ObservableObject {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard let self, self.isStreaming else { return }
-                self.appendMessage(.system, "[响应超时,已自动结束]")
+                self.appendMessage(.system, "[timed out — closed automatically]")
                 self.endStreaming()
             }
         }
@@ -469,7 +469,7 @@ final class ChatViewModel: NSObject, ObservableObject {
                 try await api.confirmIntakePlan(autoApprove: pendingAutoApprove)
                 pendingPlan = nil
             } catch {
-                appendMessage(.system, "[开单失败: \(error.localizedDescription)] — 计划卡已保留，可重试")
+                appendMessage(.system, "[Job creation failed: \(error.localizedDescription)] — the plan card is kept, you can retry")
             }
         }
     }
@@ -482,7 +482,7 @@ final class ChatViewModel: NSObject, ObservableObject {
                 try await api.denyIntakePlan()
             } catch {
                 // 取消失败不阻塞继续对话（下轮输入服务端也会丢弃暂存）。
-                appendMessage(.system, "[取消失败: \(error.localizedDescription)]")
+                appendMessage(.system, "[Cancel failed: \(error.localizedDescription)]")
             }
         }
     }
@@ -524,7 +524,7 @@ final class ChatViewModel: NSObject, ObservableObject {
     /// （intake loop 无派发类工具可拦），起止纯本地。
     func startCall() {
         guard speech.isConfigured else {
-            appendMessage(.system, "请先在设置里填写 Azure Speech key 和 region")
+            appendMessage(.system, "Fill in the Azure Speech key and region in Settings first")
             return
         }
         isInCall = true
@@ -580,7 +580,7 @@ final class ChatViewModel: NSObject, ObservableObject {
         speech.suspendAutoRestart = true
         stopListening()
         stopSpeaking()
-        NowPlayingManager.shared.updatePhase("已暂停")
+        NowPlayingManager.shared.updatePhase("Paused")
     }
 
     /// Resume a paused call: rebuild the recognizer (~1-2s) and continue the
@@ -594,7 +594,7 @@ final class ChatViewModel: NSObject, ObservableObject {
         // startListening clears the suspended flag; re-apply mute or the mic
         // would go live while the UI / lock screen still say 已静音.
         if isMuted { speech.suspendListening() }
-        NowPlayingManager.shared.updatePhase(isMuted ? "已静音" : "正在聆听…")
+        NowPlayingManager.shared.updatePhase(isMuted ? "Muted" : "Listening…")
     }
 
     /// Mute/unmute the mic during a call (mapped to the lock-screen play/pause button).
@@ -603,10 +603,10 @@ final class ChatViewModel: NSObject, ObservableObject {
         isMuted.toggle()
         if isMuted {
             speech.suspendListening()
-            NowPlayingManager.shared.updatePhase("已静音")
+            NowPlayingManager.shared.updatePhase("Muted")
         } else {
             speech.resumeListening()
-            NowPlayingManager.shared.updatePhase("正在聆听…")
+            NowPlayingManager.shared.updatePhase("Listening…")
         }
     }
 
@@ -723,7 +723,7 @@ final class ChatViewModel: NSObject, ObservableObject {
             // WS dropped mid-turn: the backend's `done` broadcast has no
             // buffer and no replay, so it's already lost. Close the turn now
             // rather than leaving the indicator pinned until the watchdog.
-            appendMessage(.system, "[连接中断 · 自动重连中]")
+            appendMessage(.system, "[connection lost — reconnecting]")
             endStreaming()
         }
         if suspendedDrop {

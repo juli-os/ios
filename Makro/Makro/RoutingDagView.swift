@@ -22,9 +22,9 @@ enum RoutingDim: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .org: return "组织"
-        case .traffic: return "流量"
-        case .load: return "忙闲"
+        case .org: return "Structure"
+        case .traffic: return "Traffic"
+        case .load: return "Load"
         }
     }
 }
@@ -70,10 +70,10 @@ enum RoutingLayout {
             }
         }
         let entry = DagBand(
-            key: "entry", label: "入口 · 维度不改变入口层",
+            key: "entry", label: "Inlets — the dimension never changes this layer",
             items: senders.sorted { (senderCounts[$0] ?? 0) > (senderCounts[$1] ?? 0) }.map { email in
                 DagCard(key: "e:\(email)", name: email,
-                        subtitle: "\(senderCounts[email] ?? 0) 次决策",
+                        subtitle: "\(senderCounts[email] ?? 0) decisions",
                         dot: .none, count: senderCounts[email] ?? 0,
                         fallback: 0, bound: false, clone: false)
             })
@@ -101,19 +101,19 @@ enum RoutingLayout {
             }
             items += bases.filter { ($0.company ?? "").isEmpty }
             let companyCards = graph.companies.sorted().map {
-                DagCard(key: "c:\($0)", name: $0, subtitle: "公司", dot: .none, count: 0, fallback: 0, bound: false, clone: false)
+                DagCard(key: "c:\($0)", name: $0, subtitle: "Company", dot: .none, count: 0, fallback: 0, bound: false, clone: false)
             }
             let domainCards = graph.domains.map {
                 DagCard(key: "d:\($0.company)/\($0.name)", name: $0.name, subtitle: $0.company,
                         dot: .none, count: 0, fallback: 0, bound: false, clone: false)
             }
             return [entry,
-                    DagBand(key: "company", label: "公司 · COMPANY", items: companyCards),
-                    DagBand(key: "domain", label: "业务域 · DOMAIN", items: domainCards),
-                    DagBand(key: "session", label: "会话 · SESSION", items: withClones(items))]
+                    DagBand(key: "company", label: "Company · COMPANY", items: companyCards),
+                    DagBand(key: "domain", label: "Domain · DOMAIN", items: domainCards),
+                    DagBand(key: "session", label: "Session · SESSION", items: withClones(items))]
         case .traffic:
             let bands: [(key: String, label: String, min: Int)] = [
-                ("hot", "HOT ×40+", 40), ("mid", "MID ×10-40", 10), ("low", "LOW ×1-10", 1), ("idle", "IDLE ×0 · 离线", 0),
+                ("hot", "HOT ×40+", 40), ("mid", "MID ×10-40", 10), ("low", "LOW ×1-10", 1), ("idle", "IDLE ×0 · offline", 0),
             ]
             var out: [DagBand] = [entry]
             for b in bands {
@@ -128,7 +128,7 @@ enum RoutingLayout {
             return out
         case .load:
             var out: [DagBand] = [entry]
-            let labels = ["WORKING · 正在干活", "LIVE · 在线空闲", "离线 · 未起会话"]
+            let labels = ["WORKING · on a job", "LIVE · idle", "Offline · no session"]
             for (i, label) in labels.enumerated() {
                 let inTier = bases.filter { tier($0) == i }
                     .sorted { (sessionCounts[$0.name] ?? 0) > (sessionCounts[$1.name] ?? 0) }
@@ -198,7 +198,7 @@ final class RoutingDagViewModel: ObservableObject {
             // trace 态并显式提示——全图照常点亮不再是「真实路由点亮」。
             traceWF = nil
             traceSessions = []
-            traceNotice = "该案卷已超出最近分发窗口（仅保留 \(graph.recent.count) 条），无法回放真实路由"
+            traceNotice = "This casefile is beyond the recent-dispatch window (only \(graph.recent.count) kept) — its real route cannot be replayed"
             return
         }
         traceSessions = nodes
@@ -212,7 +212,7 @@ struct RoutingDagView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("维度", selection: Binding(
+            Picker("Dimension", selection: Binding(
                 get: { vm.dim },
                 set: { d in Task { await vm.setDim(d) } })) {
                 ForEach(RoutingDim.allCases) { d in Text(d.label).tag(d) }
@@ -237,7 +237,7 @@ struct RoutingDagView: View {
                                 .tracking(1.2)
                                 .foregroundStyle(.tertiary)
                             if band.items.isEmpty {
-                                Text("（空）").font(DS.mono(12)).foregroundStyle(.tertiary)
+                                Text("(empty)").font(DS.mono(12)).foregroundStyle(.tertiary)
                             }
                             ForEach(band.items) { cardView($0) }
                         }
@@ -248,7 +248,7 @@ struct RoutingDagView: View {
             }
         }
         .background(DS.Canvas.app)
-        .navigationTitle("路由图")
+        .navigationTitle("Routing map")
         .navigationBarTitleDisplayMode(.inline)
         .task { await vm.load() }
     }
@@ -256,7 +256,7 @@ struct RoutingDagView: View {
     private var recentStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Text("最近分发").font(DS.mono(11)).foregroundStyle(.tertiary)
+                Text("Recent dispatches").font(DS.mono(11)).foregroundStyle(.tertiary)
                 ForEach(vm.recent.prefix(8)) { r in
                     Button {
                         if let wf = r.workflow { Task { await vm.toggleTrace(wf) } }
@@ -283,11 +283,11 @@ struct RoutingDagView: View {
 
     private var traceBar: some View {
         HStack {
-            Text("trace · \(vm.traceWF ?? "") —— 该单真实路由点亮，其余降暗")
+            Text("trace · \(vm.traceWF ?? "") — this job’s real route is lit, others dimmed")
                 .font(DS.mono(12))
                 .lineLimit(1)
             Spacer()
-            Button("退出") {
+            Button("Done") {
                 vm.traceWF = nil
                 vm.traceSessions = []
                 vm.traceNotice = nil
@@ -315,7 +315,7 @@ struct RoutingDagView: View {
             }
             Spacer()
             if c.fallback > 0 {
-                Text("落回 ×\(c.fallback)")
+                Text("fallback ×\(c.fallback)")
                     .font(DS.mono(10, .semibold))
                     .foregroundStyle(DS.Ink.amber)
                     .padding(.horizontal, 8).padding(.vertical, 3)
@@ -325,7 +325,7 @@ struct RoutingDagView: View {
                 Text("×\(c.count)").font(DS.mono(13, .bold)).foregroundStyle(DS.Ink.mint)
             }
             if c.bound {
-                Text("绑定")
+                Text("bound")
                     .font(DS.mono(9))
                     .foregroundStyle(DS.Ink.mint)
                     .padding(.horizontal, 6).padding(.vertical, 2)

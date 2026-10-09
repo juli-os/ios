@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		04CE88BE0C73102C401150DA /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE95557715F0222A9A2D898 /* Models.swift */; };
+		05B5627466873E3AA3A64328 /* Pods_Makro.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C9D85B859F771E6B6072B629 /* Pods_Makro.framework */; };
 		078F5B727EC071193F9BBEFA /* WorkflowRefCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 658D8BF922A8E613A3CDF855 /* WorkflowRefCard.swift */; };
 		08E7AC9097713671B80AEF25 /* AzureSpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70034F1AACF0415FC0A7B401 /* AzureSpeechManager.swift */; };
 		0EDBD3763B8A7D8AB21841C0 /* AgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A0C07C5736C209478DCC0DA /* AgentsView.swift */; };
@@ -19,7 +20,6 @@
 		3542036E248FEB97136E3E85 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AFE09E16F77FB3DF26DD049 /* ChatViewModel.swift */; };
 		39A306B2543D6CC9742AB166 /* ArtifactPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D24C3961F36B7BCB778B26 /* ArtifactPreviewView.swift */; };
 		41579058E4B6ACC46D7FBEA4 /* GateWorkbenchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6825777E7BC6C19733F3067A /* GateWorkbenchView.swift */; };
-		4DC99C04662727812ACD9C8F /* Pods_Makro.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DC67E29D76FB2D30DC72F2D /* Pods_Makro.framework */; };
 		56482AAE9D6DAA69EDDAAAFE /* StartCallIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88D8320BDE02BEA38279406C /* StartCallIntent.swift */; };
 		5BE0DA375CFA21123393132E /* FeedbackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0A2B5401E226FEE30D4A69 /* FeedbackView.swift */; };
 		5E54EFC90B63393B24ECA27F /* EmlPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A4A5FBFBFDCEAEA70B0732 /* EmlPreview.swift */; };
@@ -70,6 +70,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		01CB86CAC8AA6E07A1D5E57A /* Pods-Makro.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Makro.release.xcconfig"; path = "Target Support Files/Pods-Makro/Pods-Makro.release.xcconfig"; sourceTree = "<group>"; };
 		07256E45F5130600B29B76D3 /* Makro.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Makro.entitlements; sourceTree = "<group>"; };
 		073F7A972B71A581504EC2F4 /* Makro.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Makro.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		09A4A5FBFBFDCEAEA70B0732 /* EmlPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmlPreview.swift; sourceTree = "<group>"; };
@@ -83,7 +84,7 @@
 		4DC64CA851856D0C0253E613 /* MakroShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MakroShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		51CCADE62E60BE9C2266C7D5 /* TerminalDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalDetailView.swift; sourceTree = "<group>"; };
 		59A75C5F00F6952354A9AE79 /* MakroShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MakroShare.entitlements; sourceTree = "<group>"; };
-		5DC67E29D76FB2D30DC72F2D /* Pods_Makro.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Makro.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E99B1D9397B78DEE2014AC9 /* Pods-Makro.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Makro.debug.xcconfig"; path = "Target Support Files/Pods-Makro/Pods-Makro.debug.xcconfig"; sourceTree = "<group>"; };
 		62B7D34999C10080A92664E4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		658D8BF922A8E613A3CDF855 /* WorkflowRefCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowRefCard.swift; sourceTree = "<group>"; };
 		6825777E7BC6C19733F3067A /* GateWorkbenchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GateWorkbenchView.swift; sourceTree = "<group>"; };
@@ -101,13 +102,12 @@
 		A6800535F38587ED517390C2 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		B845DA418647EA128499AB3A /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		BA0A2B5401E226FEE30D4A69 /* FeedbackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackView.swift; sourceTree = "<group>"; };
-		C1CFC6B8D846EB12DDCF3D73 /* Pods-Makro.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Makro.release.xcconfig"; path = "Target Support Files/Pods-Makro/Pods-Makro.release.xcconfig"; sourceTree = "<group>"; };
 		C3D6BF0C66D3E9E0D9FE428E /* LifecycleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifecycleView.swift; sourceTree = "<group>"; };
 		C3D75BC8B94CB1D4972A8DD1 /* RoutingDagView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingDagView.swift; sourceTree = "<group>"; };
+		C9D85B859F771E6B6072B629 /* Pods_Makro.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Makro.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		D33487D9063356B4947134C2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D77BB6D9E9518CDB57C8B0EB /* APIClient+Feedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "APIClient+Feedback.swift"; sourceTree = "<group>"; };
 		DA9859C06BC6CD8E48858057 /* ANSI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ANSI.swift; sourceTree = "<group>"; };
-		DBA7056E9F6145EC407CD599 /* Pods-Makro.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Makro.debug.xcconfig"; path = "Target Support Files/Pods-Makro/Pods-Makro.debug.xcconfig"; sourceTree = "<group>"; };
 		E5771BD2F137609458953553 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		E7115624D08EB3EC3D45859F /* MakroApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakroApp.swift; sourceTree = "<group>"; };
 		EF4E0E4B479FA41D70865DD8 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -116,35 +116,17 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A2FD4CFE056BB56237988C0D /* Frameworks */ = {
+		2BC41DDE7EDC10C5C46579B5 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4DC99C04662727812ACD9C8F /* Pods_Makro.framework in Frameworks */,
+				05B5627466873E3AA3A64328 /* Pods_Makro.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		28BDC62E6C5CCBC4244C3721 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				5DC67E29D76FB2D30DC72F2D /* Pods_Makro.framework */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		39FF89D397A04CFE049172B3 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				DBA7056E9F6145EC407CD599 /* Pods-Makro.debug.xcconfig */,
-				C1CFC6B8D846EB12DDCF3D73 /* Pods-Makro.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
-			sourceTree = "<group>";
-		};
 		9A7AD897179BC4C3348928D1 /* Makro */ = {
 			isa = PBXGroup;
 			children = (
@@ -206,14 +188,32 @@
 			path = MakroShare;
 			sourceTree = "<group>";
 		};
+		E5107B4032AD41B67806EF10 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				C9D85B859F771E6B6072B629 /* Pods_Makro.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		ED6AE60654063D529EE60D94 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				5E99B1D9397B78DEE2014AC9 /* Pods-Makro.debug.xcconfig */,
+				01CB86CAC8AA6E07A1D5E57A /* Pods-Makro.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
 		F57C61FD7099E8A002C0A625 = {
 			isa = PBXGroup;
 			children = (
 				9A7AD897179BC4C3348928D1 /* Makro */,
 				C58EC2FF0B0A5E6685505810 /* MakroShare */,
 				B78F8B751FC8816D0CFBC7E1 /* Products */,
-				39FF89D397A04CFE049172B3 /* Pods */,
-				28BDC62E6C5CCBC4244C3721 /* Frameworks */,
+				ED6AE60654063D529EE60D94 /* Pods */,
+				E5107B4032AD41B67806EF10 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -224,12 +224,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 76C359406432363A739394C4 /* Build configuration list for PBXNativeTarget "Makro" */;
 			buildPhases = (
-				E324F9C7CDE46F416F45FB73 /* [CP] Check Pods Manifest.lock */,
+				8C985919588FE7C6B5A017FC /* [CP] Check Pods Manifest.lock */,
 				6CD5296BD50C56EAE2061F3E /* Sources */,
 				269CF20ABFBAC842C6927048 /* Resources */,
 				3B759BF418AF8EAD71A3CECE /* Embed Foundation Extensions */,
-				A2FD4CFE056BB56237988C0D /* Frameworks */,
-				1EF0F8902CE50E6FE4C957DC /* [CP] Embed Pods Frameworks */,
+				2BC41DDE7EDC10C5C46579B5 /* Frameworks */,
+				564CA4F758B2932323D99FC4 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -266,11 +266,11 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					3FF398F9834B5FD99FA0767F = {
-						DevelopmentTeam = ;
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 					D29A0D3564AAC4CBE69B6792 = {
-						DevelopmentTeam = ;
+						DevelopmentTeam = "";
 					};
 				};
 			};
@@ -306,7 +306,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		1EF0F8902CE50E6FE4C957DC /* [CP] Embed Pods Frameworks */ = {
+		564CA4F758B2932323D99FC4 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -323,7 +323,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Makro/Pods-Makro-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		E324F9C7CDE46F416F45FB73 /* [CP] Check Pods Manifest.lock */ = {
+		8C985919588FE7C6B5A017FC /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -527,7 +527,7 @@
 		};
 		CA121894D8B46B6B5E24A589 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = DBA7056E9F6145EC407CD599 /* Pods-Makro.debug.xcconfig */;
+			baseConfigurationReference = 5E99B1D9397B78DEE2014AC9 /* Pods-Makro.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Makro/Makro.entitlements;
@@ -574,7 +574,7 @@
 		};
 		FC9D9B58664D93AB17F2570E /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C1CFC6B8D846EB12DDCF3D73 /* Pods-Makro.release.xcconfig */;
+			baseConfigurationReference = 01CB86CAC8AA6E07A1D5E57A /* Pods-Makro.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Makro/Makro.entitlements;

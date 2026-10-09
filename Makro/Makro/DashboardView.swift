@@ -25,9 +25,9 @@ struct DashboardView: View {
                 if let s = stats {
                     metricRow(s)
                     if let attr = s.attribution { attributionStrip(attr) } // web 统计视图替代时新增
-                    Picker("时段", selection: $days) {
-                        Text("7 天").tag(7)
-                        Text("30 天").tag(30)
+                    Picker("Period", selection: $days) {
+                        Text("7d").tag(7)
+                        Text("30d").tag(30)
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: days) { _ in Task { await load() } }
@@ -40,7 +40,7 @@ struct DashboardView: View {
                 } else if loadError == nil {
                     HStack(spacing: 10) {
                         ProgressView()
-                        Text("读取统计…").font(DS.mono(12)).foregroundStyle(.tertiary)
+                        Text("Loading stats…").font(DS.mono(12)).foregroundStyle(.tertiary)
                     }
                     .frame(maxWidth: .infinity).padding(.top, 40)
                 }
@@ -60,7 +60,7 @@ struct DashboardView: View {
         do {
             stats = try await APIClient.shared.fetchDashboardStats(days: days)
         } catch {
-            loadError = "统计读取失败：\(error.localizedDescription)"
+            loadError = "Stats failed to load: \(error.localizedDescription)"
         }
         // 模型分布与 Skill Top 与时段无关，首次拉一次即可。
         if usage == nil, let u = try? await APIClient.shared.fetchUsageStats(hours: 24 * days) {
@@ -77,19 +77,19 @@ struct DashboardView: View {
         HStack(spacing: 10) {
             // 第一卡（wf_66a9b632154d）：缓存命中率进第一行——z.ai 计费核对
             // 的第一眼指标（cached/input；input=0 不显）。
-            metricCard(title: "今日 Token", value: fmtTokens(s.tokens.today.inputTokens + s.tokens.today.outputTokens),
+            metricCard(title: "Tokens today", value: fmtTokens(s.tokens.today.inputTokens + s.tokens.today.outputTokens),
                        cacheRate: cacheRateLabel(s),
                        sub: subLine(in: s.tokens.today.inputTokens, out: s.tokens.today.outputTokens,
                                     delta: delta(s.tokens.today.inputTokens + s.tokens.today.outputTokens,
                                                  s.tokens.yesterday.inputTokens + s.tokens.yesterday.outputTokens)))
-            metricCard(title: "今日 Prompt", value: "\(s.tokens.today.calls)",
-                       sub: "调用次数 · 计费口径")
-            metricCard(title: "今日 Workflow", value: "\(s.workflows.today)",
+            metricCard(title: "Prompts today", value: "\(s.tokens.today.calls)",
+                       sub: "call count · billing basis")
+            metricCard(title: "Jobs today", value: "\(s.workflows.today)",
                        sub: s.workflows.today >= s.workflows.yesterday
-                         ? "↑ \(s.workflows.today - s.workflows.yesterday) vs 昨日"
-                         : "↓ \(s.workflows.yesterday - s.workflows.today) vs 昨日")
-            metricCard(title: "总 Workflow", value: "\(s.workflows.total)",
-                       sub: "累计全部单据")
+                         ? "↑ \(s.workflows.today - s.workflows.yesterday) vs yesterday"
+                         : "↓ \(s.workflows.yesterday - s.workflows.today) vs yesterday")
+            metricCard(title: "Jobs total", value: "\(s.workflows.total)",
+                       sub: "all time")
         }
     }
 
@@ -98,7 +98,7 @@ struct DashboardView: View {
     // chat 等不挂单消耗）。
     private func attributionStrip(_ a: DashboardStats.Attribution) -> some View {
         let pct = a.ledger.inputTokens > 0 ? a.inputRate * 100 : 0
-        return chartCard(title: "归属率 · 近 \(days) 天") {
+        return chartCard(title: "Attribution · last \(days) days") {
             VStack(alignment: .leading, spacing: 8) {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
@@ -109,14 +109,14 @@ struct DashboardView: View {
                 }
                 .frame(height: 12)
                 HStack(spacing: 14) {
-                    Text("单子归属 \(fmtTokens(a.workflow.inputTokens)) · \(String(format: "%.0f%%", pct))")
+                    Text("Job-attributed \(fmtTokens(a.workflow.inputTokens)) · \(String(format: "%.0f%%", pct))")
                         .font(DS.mono(10, .semibold)).foregroundStyle(DS.Ink.mintDeep)
-                    Text("未归属 \(fmtTokens(a.unattributed.inputTokens))")
+                    Text("Unattributed \(fmtTokens(a.unattributed.inputTokens))")
                         .font(DS.mono(10)).foregroundStyle(.tertiary)
-                    Text("回合 \(a.workflow.prompts)/\(a.ledger.calls)")
+                    Text("Turns \(a.workflow.prompts)/\(a.ledger.calls)")
                         .font(DS.mono(10)).foregroundStyle(.tertiary)
                 }
-                Text("总量含引擎 llm 行、无归属 CC 回合、chat 等不挂单消耗——单子口径之外的纠偏锚。")
+                Text("The total includes engine llm rows, unattributed CC turns, chat and other spend not tied to a job — an anchor outside the per-job view.")
                     .font(DS.mono(9)).foregroundStyle(.tertiary)
             }
         }
@@ -150,7 +150,7 @@ struct DashboardView: View {
 
     private func subLine(in inTok: Double, out outTok: Double, delta: Double) -> String {
         let arrow = delta >= 0 ? "↑" : "↓"
-        return "输入 \(fmtTokens(inTok)) · 输出 \(fmtTokens(outTok)) · \(arrow)\(fmtTokens(abs(delta))) vs 昨日"
+        return "Input \(fmtTokens(inTok)) · Output \(fmtTokens(outTok)) · \(arrow)\(fmtTokens(abs(delta))) vs yesterday"
     }
     private func delta(_ a: Double, _ b: Double) -> Double { a - b }
 
@@ -164,17 +164,17 @@ struct DashboardView: View {
 
     // MARK: - C0 缓存命中率趋势（wf_5160b09e18d2）：按日 cached/input（%）。
     private func cacheRateTrend(_ s: DashboardStats) -> some View {
-        chartCard(title: "缓存命中率趋势") {
+        chartCard(title: "Cache hit-rate trend") {
             Chart(s.tokens.byDay, id: \.day) { d in
                 LineMark(
-                    x: .value("日期", dayStr(d.day)),
-                    y: .value("命中率", d.inputTokens > 0 ? (d.cachedTokens ?? 0) / d.inputTokens * 100 : 0)
+                    x: .value("Date", dayStr(d.day)),
+                    y: .value("Hit rate", d.inputTokens > 0 ? (d.cachedTokens ?? 0) / d.inputTokens * 100 : 0)
                 )
                 .foregroundStyle(DS.Ink.mintDeep)
                 .interpolationMethod(.catmullRom)
                 AreaMark(
-                    x: .value("日期", dayStr(d.day)),
-                    y: .value("命中率", d.inputTokens > 0 ? (d.cachedTokens ?? 0) / d.inputTokens * 100 : 0)
+                    x: .value("Date", dayStr(d.day)),
+                    y: .value("Hit rate", d.inputTokens > 0 ? (d.cachedTokens ?? 0) / d.inputTokens * 100 : 0)
                 )
                 .foregroundStyle(LinearGradient(colors: [DS.Ink.mint.opacity(0.28), DS.Ink.mint.opacity(0.03)], startPoint: .top, endPoint: .bottom))
                 .interpolationMethod(.catmullRom)
@@ -187,12 +187,12 @@ struct DashboardView: View {
     // MARK: - C Token 趋势（输入/输出分层面积）
 
     private func tokenTrend(_ s: DashboardStats) -> some View {
-        chartCard(title: "Token 消耗趋势") {
+        chartCard(title: "Token usage trend") {
             Chart(s.tokens.byDay, id: \.day) { d in
-                AreaMark(x: .value("日期", dayStr(d.day)), y: .value("输入(含缓存)", d.inputTokens))
+                AreaMark(x: .value("Date", dayStr(d.day)), y: .value("Input (cache incl.)", d.inputTokens))
                     .foregroundStyle(LinearGradient(colors: [DS.Ink.mint.opacity(0.45), DS.Ink.mint.opacity(0.06)], startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.catmullRom)
-                AreaMark(x: .value("日期", dayStr(d.day)), y: .value("输出", d.outputTokens))
+                AreaMark(x: .value("Date", dayStr(d.day)), y: .value("Output", d.outputTokens))
                     .foregroundStyle(LinearGradient(colors: [DS.Ink.amber.opacity(0.5), DS.Ink.amber.opacity(0.08)], startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.catmullRom)
             }
@@ -203,9 +203,9 @@ struct DashboardView: View {
     // MARK: - D Workflow 趋势
 
     private func workflowTrend(_ s: DashboardStats) -> some View {
-        chartCard(title: "Workflow 趋势") {
+        chartCard(title: "Job trend") {
             Chart(s.workflows.byDay, id: \.day) { d in
-                BarMark(x: .value("日期", dayStr(d.day)), y: .value("单数", d.count))
+                BarMark(x: .value("Date", dayStr(d.day)), y: .value("Jobs", d.count))
                     .foregroundStyle(DS.Ink.mint.gradient)
                     .cornerRadius(3)
             }
@@ -216,17 +216,17 @@ struct DashboardView: View {
 
     private func distRow(_ s: DashboardStats, _ u: UsageByModel) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            chartCard(title: "模型分布 · \(days == 7 ? "7" : "30") 天") {
+            chartCard(title: "Model mix · \(days == 7 ? "7" : "30") days") {
                 Chart(u.byModel.prefix(6), id: \.model) { m in
-                    SectorMark(angle: .value("输入", m.inputTokens), innerRadius: .ratio(0.45))
-                        .foregroundStyle(by: .value("模型", m.model))
+                    SectorMark(angle: .value("Input", m.inputTokens), innerRadius: .ratio(0.45))
+                        .foregroundStyle(by: .value("Model", m.model))
                 }
                 .chartLegend(position: .bottom, spacing: 8)
             }
-            chartCard(title: "状态构成") {
+            chartCard(title: "Status mix") {
                 Chart(s.workflows.byStatus, id: \.status) { st in
-                    SectorMark(angle: .value("单数", st.count), innerRadius: .ratio(0.55))
-                        .foregroundStyle(by: .value("状态", statusLabel(st.status)))
+                    SectorMark(angle: .value("Jobs", st.count), innerRadius: .ratio(0.55))
+                        .foregroundStyle(by: .value("Status", statusLabel(st.status)))
                 }
                 .chartLegend(position: .bottom, spacing: 8)
             }
@@ -238,14 +238,14 @@ struct DashboardView: View {
     private func skillTop() -> some View {
         let top = skills.filter { !$0.resident && $0.uses > 0 }.sorted { $0.uses > $1.uses }.prefix(10)
         if top.isEmpty {
-            return AnyView(chartCard(title: "Skill 调用 Top") {
-                Text("暂无调用（统计自 10-04 起累积）")
+            return AnyView(chartCard(title: "Top skills") {
+                Text("No calls yet (counted since 10-04)")
                     .font(DS.mono(11)).foregroundStyle(.tertiary).frame(maxWidth: .infinity, alignment: .center).padding(.vertical, 20)
             })
         }
-        return AnyView(chartCard(title: "Skill 调用 Top \(top.count)") {
+        return AnyView(chartCard(title: "Top skills (\(top.count))") {
             Chart(Array(top.enumerated()), id: \.offset) { _, sk in
-                BarMark(x: .value("次数", sk.uses), y: .value("技能", sk.name), stacking: .normalized)
+                BarMark(x: .value("Count", sk.uses), y: .value("Skill", sk.name), stacking: .normalized)
                     .foregroundStyle(colorFor(family: sk.family))
                     .cornerRadius(3)
                     .annotation(position: .trailing) {
@@ -259,7 +259,7 @@ struct DashboardView: View {
     // MARK: - G 脚注
 
     private var footnote: some View {
-        Text("口径：今日=自然日（本地时区）；Token 输入含缓存命中桶（与账本一致）；Skill 统计自 2026-10-04 修复后累积。")
+        Text("Basis: today = calendar day (local timezone); token input includes the cache-hit bucket (ledger-consistent); skill counts accumulate since the 2026-10-04 fix.")
             .font(DS.mono(9.5, .regular)).foregroundStyle(.tertiary)
             .padding(.top, 2)
     }
@@ -286,11 +286,11 @@ struct DashboardView: View {
 
     private func statusLabel(_ s: String) -> String {
         switch s {
-        case "running": return "进行中"
-        case "queued": return "排队"
-        case "completed": return "已完成"
-        case "failed": return "失败"
-        case "cancelled": return "已取消"
+        case "running": return "Running"
+        case "queued": return "Queued"
+        case "completed": return "Completed"
+        case "failed": return "Failed"
+        case "cancelled": return "Cancelled"
         default: return s
         }
     }

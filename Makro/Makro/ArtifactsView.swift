@@ -116,7 +116,7 @@ struct ArtifactsView: View {
             Button {
                 vm.selectedSession = nil
             } label: {
-                Label("全部会话", systemImage: vm.selectedSession == nil ? "checkmark" : "tray.full")
+                Label("All sessions", systemImage: vm.selectedSession == nil ? "checkmark" : "tray.full")
             }
             ForEach(vm.sessionCounts) { sc in
                 Button {
@@ -129,7 +129,7 @@ struct ArtifactsView: View {
             HStack(spacing: 6) {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .font(.system(size: 13, weight: .medium))
-                Text(vm.selectedSession.flatMap { "\($0)" } ?? "会话")
+                Text(vm.selectedSession.flatMap { "\($0)" } ?? "Session")
                     .font(DS.text(13, .semibold))
                     .lineLimit(1)
                     .frame(maxWidth: 90)
@@ -182,15 +182,15 @@ struct ArtifactsView: View {
             skeletonGrid
         } else if let err = vm.error {
             stateVisual("exclamationmark.triangle", tint: DS.Ink.rose,
-                        title: "出了点问题", sub: err)
+                        title: "Something went wrong", sub: err)
         } else if vm.artifacts.isEmpty {
             stateVisual("doc.richtext", tint: DS.Ink.mint,
                         title: "No artifacts yet",
-                        sub: "AI 生成的 HTML / 视频会出现在这里。\n默认列出所有 session。")
+                        sub: "AI-generated HTML and video land here.\nAll sessions listed by default.")
         } else if vm.filtered.isEmpty {
             stateVisual("magnifyingglass", tint: DS.Ink.zinc,
-                        title: "无匹配结果",
-                        sub: "试试其他关键字,或切换类型/会话筛选。")
+                        title: "No matches",
+                        sub: "Try other keywords, or change the type/session filter.")
         } else {
             cardGrid
         }
@@ -346,7 +346,7 @@ private struct ArtifactCard: View {
                         Circle()
                             .fill(Self.statusColor(wf.status))
                             .frame(width: 7, height: 7)
-                        Text(wf.title.isEmpty ? "所属单" : wf.title)
+                        Text(wf.title.isEmpty ? "Job" : wf.title)
                             .font(DS.text(12, .medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
@@ -360,7 +360,7 @@ private struct ArtifactCard: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("打开所属单 \(wf.title)")
+                .accessibilityLabel("Open job \(wf.title)")
             } else {
                 Text(Self.formatSize(artifact.size))
                     .font(DS.mono(9.5, .regular))
@@ -403,7 +403,7 @@ private struct ArtifactCard: View {
             let f = DateFormatter(); f.dateFormat = "HH:mm"
             return f.string(from: date)
         }
-        if cal.isDateInYesterday(date) { return "昨天" }
+        if cal.isDateInYesterday(date) { return "Yesterday" }
         let f = DateFormatter(); f.dateFormat = "MM-dd"
         return f.string(from: date)
     }
@@ -469,9 +469,9 @@ final class ArtifactViewModel: ObservableObject {
 
         var label: String {
             switch self {
-            case .all: return "全部"
-            case .html: return "网页"
-            case .video: return "视频"
+            case .all: return "All"
+            case .html: return "Pages"
+            case .video: return "Videos"
             }
         }
 

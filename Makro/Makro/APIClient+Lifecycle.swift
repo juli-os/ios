@@ -175,7 +175,7 @@ extension APIClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "note": "iphone 重试并改指令", "by": "iphone", "plan": plan,
+            "note": "iphone retried with new instructions", "by": "iphone", "plan": plan,
         ])
         let (data, response) = try await urlSession.data(for: request)
         try checkAuthData(response, data: data)

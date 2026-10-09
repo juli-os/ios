@@ -34,7 +34,7 @@ struct GateWorkbenchView: View {
                     if !item.step.deliverableItems.isEmpty { attachmentsCard }
                     noteCard
                     if let errorText { workbenchError(errorText) }
-                    Text("发起 ≠ 自动发送：批准后按引擎节奏走；全部动作写账本（by: iphone）")
+                    Text("Approving here does not send immediately — the engine paces delivery; every action hits the ledger (by: iphone)")
                         .font(DS.mono(9.5)).foregroundStyle(.secondary)
                         .padding(.top, 2)
                 }
@@ -50,9 +50,9 @@ struct GateWorkbenchView: View {
         .sheet(isPresented: $showRework) {
             ReworkSheet(item: item, vm: vm)
         }
-        .alert("对齐修正", isPresented: $showAlign) {
-            TextField("人定稿的修正意见…", text: $alignText)
-            Button("入档并继续") {
+        .alert("Align amendment", isPresented: $showAlign) {
+            TextField("Your final wording of the correction…", text: $alignText)
+            Button("File & continue") {
                 let text = alignText.trimmingCharacters(in: .whitespaces)
                 if !text.isEmpty && !busy {
                     busy = true
@@ -67,16 +67,16 @@ struct GateWorkbenchView: View {
                 }
                 alignText = ""
             }
-            Button("取消", role: .cancel) { alignText = "" }
+            Button("Cancel", role: .cancel) { alignText = "" }
         } message: {
-            Text("修正成为 amendment 工件入档，下游 agent 锚定人定稿版本，流程继续")
+            Text("The correction is filed as an amendment artifact; downstream agents anchor on your final wording and the run continues")
         }
         .background(DS.Canvas.app.ignoresSafeArea())
         .navigationTitle(item.step.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("‹ 返回") { dismiss() }.foregroundStyle(DS.Ink.mintDeep)
+                Button("‹ Back") { dismiss() }.foregroundStyle(DS.Ink.mintDeep)
             }
         }
         .task { await loadTree() }
@@ -87,7 +87,7 @@ struct GateWorkbenchView: View {
         HStack(spacing: 8) {
             Image(systemName: "circle.fill").font(.system(size: 8))
                 .foregroundStyle(DS.Ink.amber)
-            Text("待审批").font(DS.mono(11, .semibold)).foregroundStyle(DS.Ink.amber)
+            Text("In review").font(DS.mono(11, .semibold)).foregroundStyle(DS.Ink.amber)
             Text("· \(item.workflow?.title ?? item.step.workflow_id) \(roundText)")
                 .font(DS.mono(11)).foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -103,7 +103,7 @@ struct GateWorkbenchView: View {
     // 前置检查卡
     private var checksCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(checks.isEmpty ? "发送前置检查 · 无" : "发送前置检查 · \(checks.filter(\.failed).isEmpty ? "\(checks.count)/\(checks.count) 通过" : "有未过项")")
+            Text(checks.isEmpty ? "Pre-send checks · none" : "Pre-send checks · \(checks.filter(\.failed).isEmpty ? "\(checks.count)/\(checks.count) pass" : " — failing")")
                 .font(DS.text(13, .bold))
                 .foregroundStyle(checks.filter(\.failed).isEmpty && !checks.isEmpty ? DS.Ink.done : (checks.isEmpty ? .secondary : DS.Ink.rose))
             ForEach(Array(checks.enumerated()), id: \.offset) { _, c in
@@ -120,7 +120,7 @@ struct GateWorkbenchView: View {
                 }
             }
             if checkFailed {
-                Text("前置检查未通过 — 请驳回回修，不要批准")
+                Text("Pre-send checks failed — reject to rework, do not approve")
                     .font(DS.mono(11, .semibold)).foregroundStyle(DS.Ink.rose)
             }
         }
@@ -133,7 +133,7 @@ struct GateWorkbenchView: View {
     // 将发送的正文（内联全文优先，契约/fallback 兜底）
     private var bodyCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("将发送的正文").font(DS.text(13, .bold))
+            Text("Body to be sent").font(DS.text(13, .bold))
             let text = item.step.bodyInline ?? item.step.fallbackBody
             if let text {
                 Text(text)
@@ -143,16 +143,16 @@ struct GateWorkbenchView: View {
                     .padding(10)
                     .background(Color(red: 1.0, green: 0.973, blue: 0.941)) // #FFF8F0
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                Button(bodyExpanded ? "收起" : "展开全文 ▾") {
+                Button(bodyExpanded ? "Collapse" : "Expand ▾") {
                     withAnimation(DS.snappy) { bodyExpanded.toggle() }
                 }
                 .font(DS.mono(11, .semibold)).foregroundStyle(DS.Ink.mintDeep)
             } else if item.step.bodyRef != nil {
-                ContentRow(label: "待批正文", name: item.step.bodyRef!.name, bytes: nil) {
+                ContentRow(label: "Draft body", name: item.step.bodyRef!.name, bytes: nil) {
                     previewTarget = PreviewTarget(id: item.step.bodyRef!.id, name: item.step.bodyRef!.name)
                 }
             } else {
-                Text("正文以工件形式随交付物列表展示").font(DS.mono(10)).foregroundStyle(.secondary)
+                Text("The body is listed as an artifact among the deliverables").font(DS.mono(10)).foregroundStyle(.secondary)
             }
         }
         .padding(14)
@@ -164,11 +164,11 @@ struct GateWorkbenchView: View {
     // 随信附件
     private var attachmentsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("随信附件（\(item.step.deliverableItems.count)）")
+            Text("Attachments (\(item.step.deliverableItems.count))")
                 .font(DS.mono(11, .bold)).foregroundStyle(DS.Ink.mintDeep)
             ForEach(Array(item.step.deliverableItems.enumerated()), id: \.offset) { _, d in
                 if let id = d.id, !(item.step.bodyRef != nil && d.viewRole == "body") {
-                    ContentRow(label: d.viewRole == "body" ? "正文" : "交付物", name: d.name, bytes: d.bytes) {
+                    ContentRow(label: d.viewRole == "body" ? "Body" : "Deliverables", name: d.name, bytes: d.bytes) {
                         previewTarget = PreviewTarget(id: id, name: d.name)
                     }
                 }
@@ -181,7 +181,7 @@ struct GateWorkbenchView: View {
     }
 
     private var noteCard: some View {
-        TextField("备注（可选，随决定入档）…", text: $note, axis: .vertical)
+        TextField("Note (optional, filed with the decision)…", text: $note, axis: .vertical)
             .font(DS.text(12))
             .lineLimit(1...3)
             .padding(12)
@@ -204,7 +204,7 @@ struct GateWorkbenchView: View {
             Button {
                 showRework = true
             } label: {
-                Label("驳回", systemImage: "arrow.uturn.backward")
+                Label("Reject", systemImage: "arrow.uturn.backward")
                     .font(DS.text(13, .semibold))
                     .frame(maxWidth: .infinity, minHeight: 40)
             }
@@ -214,12 +214,12 @@ struct GateWorkbenchView: View {
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.910, green: 0.780, blue: 0.761), lineWidth: 1)) // #E8C7C2
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .disabled(busy)
-            .accessibilityLabel("驳回二选一")
+            .accessibilityLabel("Reject — pick one")
 
             Button {
                 showAlign = true
             } label: {
-                Label("对齐", systemImage: "square.and.pencil")
+                Label("Align", systemImage: "square.and.pencil")
                     .font(DS.text(13, .semibold))
                     .frame(maxWidth: .infinity, minHeight: 40)
             }
@@ -229,14 +229,14 @@ struct GateWorkbenchView: View {
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.918, green: 0.851, blue: 0.690), lineWidth: 1)) // #EAD9B0
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .disabled(busy)
-            .accessibilityLabel("对齐修正")
+            .accessibilityLabel("Align amendment")
 
             Button {
                 act("approve")
             } label: {
                 Group {
                     if busy { ProgressView().tint(.white) }
-                    else { Label("批准 →", systemImage: "arrow.right").font(DS.text(13, .bold)) }
+                    else { Label("Approve →", systemImage: "arrow.right").font(DS.text(13, .bold)) }
                 }
                 .frame(maxWidth: .infinity, minHeight: 40)
             }
@@ -245,7 +245,7 @@ struct GateWorkbenchView: View {
             .background(DS.Ink.mint)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .disabled(busy || checkFailed)
-            .accessibilityLabel("批准")
+            .accessibilityLabel("Approve")
         }
         .padding(.horizontal, 20).padding(.vertical, 10)
         .background(DS.Canvas.card)

@@ -36,7 +36,7 @@ struct MakroApp: App {
                 // loop + 只读查询 + 确认开单走 startTask 正门）。反馈也是
                 // 开单的一种（0929 用户裁决），随发单对话集成，反馈 tab 退役。
                 ChatView()
-                    .tabItem { Label("发单", systemImage: "bubble.left") }
+                    .tabItem { Label("Intake", systemImage: "bubble.left") }
                     .tag(0)
 
                 LifecycleView(deepLink: $gateLink)

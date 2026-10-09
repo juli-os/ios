@@ -57,11 +57,11 @@ struct CallView: View {
     /// Lock-screen card label. Paused takes priority (the mic is fully off;
     /// mute/phase are meaningless while on hold), then mute, then phase.
     private func nowPlayingPhaseLabel(for p: Phase) -> String {
-        if vm.isCallPaused { return "已暂停" }
-        if vm.isMuted { return "已静音" }
+        if vm.isCallPaused { return "Paused" }
+        if vm.isMuted { return "Muted" }
         // Mirror the in-app computed phaseLabel: a staged plan takes over the
-        // cue (lock screen should prompt 确认, not "正在聆听…").
-        if vm.pendingPlan != nil { return "待你确认 — 点按钮开单" }
+        // cue (lock screen should prompt 确认, not "Listening…").
+        if vm.pendingPlan != nil { return "Awaiting your confirm — tap to create the job" }
         return phaseLabel(for: p)
     }
 
@@ -69,7 +69,7 @@ struct CallView: View {
 
     private var header: some View {
         VStack(spacing: 4) {
-            Text("发单")
+            Text("Intake")
                 .font(DS.display(26, .semibold))
                 .foregroundStyle(DS.Canvas.phosphor)
             Text(phaseLabel)
@@ -163,7 +163,7 @@ struct CallView: View {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(DS.Canvas.phosphor)
-                    Text("待确认开单")
+                    Text("Job card — confirm to create")
                         .font(DS.text(14, .semibold))
                         .foregroundStyle(.white)
                 }
@@ -190,14 +190,14 @@ struct CallView: View {
                 }
                 // 落点（0930）：语音开单同显路由落点——确认即钉进 input.session。
                 if let landing = plan.landing, !landing.session.isEmpty {
-                    Text("落点：\(landing.session)\(landing.note.isEmpty ? "" : " · \(landing.note)")")
+                    Text("Lands: \(landing.session)\(landing.note.isEmpty ? "" : " · \(landing.note)")")
                         .font(DS.text(12, .semibold))
                         .foregroundStyle(.white.opacity(0.85))
                         .lineLimit(2)
                 }
                 HStack(spacing: 10) {
                     Button { vm.denyPlan() } label: {
-                        Text("取消")
+                        Text("Cancel")
                             .font(DS.text(14, .semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -206,7 +206,7 @@ struct CallView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     Button { vm.confirmPlan() } label: {
-                        Text("确认开单")
+                        Text("Create job")
                             .font(DS.text(14, .semibold))
                             .foregroundStyle(.black)
                             .frame(maxWidth: .infinity)
@@ -242,7 +242,7 @@ struct CallView: View {
                         .background(.white.opacity(vm.isCallPaused ? 0.28 : 0.14))
                         .clipShape(Circle())
                         .overlay(Circle().stroke(.white.opacity(0.15), lineWidth: 0.5))
-                    Text(vm.isCallPaused ? "继续" : "暂停")
+                    Text(vm.isCallPaused ? "Resume" : "Pause")
                         .font(DS.micro(11, .semibold))
                         .foregroundStyle(.white.opacity(0.6))
                 }
@@ -263,7 +263,7 @@ struct CallView: View {
                     .background(DS.Ink.rose)
                     .clipShape(Circle())
                     .overlay(Circle().stroke(.white.opacity(0.15), lineWidth: 0.5))
-                Text("结束通话")
+                Text("End call")
                     .font(DS.micro(11, .semibold))
                     .foregroundStyle(.white.opacity(0.6))
             }
@@ -285,18 +285,18 @@ struct CallView: View {
     private var phaseLabel: String {
         // A staged plan takes over the phase cue: the call is waiting on the
         // user's confirm/deny, not listening for a new utterance.
-        if vm.pendingPlan != nil { return "待你确认 — 点按钮开单" }
+        if vm.pendingPlan != nil { return "Awaiting your confirm — tap to create the job" }
         return phaseLabel(for: phase)
     }
 
     private func phaseLabel(for p: Phase) -> String {
         switch p {
-        case .paused: return "已暂停"
+        case .paused: return "Paused"
         case .listening:
             // 开单对话=静默自动成回：停顿一下即发送，无需提交短语。
-            return vm.isListening ? "正在聆听…" : "准备中…"
-        case .thinking: return "思考中…"
-        case .speaking: return "正在回答…"
+            return vm.isListening ? "Listening…" : "Preparing…"
+        case .thinking: return "Thinking…"
+        case .speaking: return "Answering…"
         }
     }
 

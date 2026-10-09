@@ -140,7 +140,7 @@ enum SpeakableText {
         var result = lines.joined(separator: ". ")
         if result.count > maxChars {
             let end = result.index(result.startIndex, offsetBy: maxChars)
-            result = String(result[result.startIndex..<end]) + "…回复过长，已截断"
+            result = String(result[result.startIndex..<end]) + "…reply too long, truncated"
         }
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -158,7 +158,7 @@ enum SpeakableText {
     private static func stripURLs(from line: String) -> String {
         line.replacingOccurrences(
             of: #"https?://[^\s)]+"#,
-            with: "链接",
+            with: "Link",
             options: .regularExpression
         )
     }
@@ -406,7 +406,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
     func startListening(continuous: Bool = false, commit: Bool = false, silenceAuto: Bool = false) {
         guard !isListening else { return }
         guard isConfigured else {
-            listenState = .error("请先在设置里填写 Azure Speech key 和 region")
+            listenState = .error("Fill in the Azure Speech key and region in Settings first")
             return
         }
         self.commitMode = commit
@@ -414,7 +414,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
         // Best-effort reserve check: assume a turn is ~30s. If even that can't
         // fit, refuse up front rather than cutting off mid-sentence.
         guard quota.canConsumeSTT(seconds: 30) else {
-            let msg = "语音识别额度已用完（本月上限 \(SpeechQuota.sttCapSeconds / 3600) 小时），已停止。"
+            let msg = "Speech recognition quota used up (monthly cap \(SpeechQuota.sttCapSeconds / 3600) h) — stopped."
             listenState = .error(msg)
             onQuotaExhausted?(msg)
             return
@@ -531,7 +531,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
                     // reason == .error means a genuine failure (auth, quota,
                     // network, mic); .endOfStream is a normal session close.
                     if evt.reason == .error {
-                        self.listenState = .error("语音识别出错：\(evt.errorDetails ?? "")")
+                        self.listenState = .error("Speech recognition error: \(evt.errorDetails ?? "")")
                     }
                     // Always fully stop on cancel, even in continuous mode.
                     self.stopListening()
@@ -558,7 +558,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
             listenState = .listening(partial: "")
             resetSilenceTimer()
         } catch {
-            listenState = .error("启动识别失败：\(error.localizedDescription)")
+            listenState = .error("Recognition failed to start: \(error.localizedDescription)")
         }
     }
 
@@ -710,14 +710,14 @@ final class AzureSpeechManager: NSObject, ObservableObject {
             throw NSError(
                 domain: "AzureSpeechManager",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "无法创建音频流格式"]
+                userInfo: [NSLocalizedDescriptionKey: "Could not create the audio stream format"]
             )
         }
         guard let stream = SPXPushAudioInputStream(audioFormat: fmt) else {
             throw NSError(
                 domain: "AzureSpeechManager",
                 code: 3,
-                userInfo: [NSLocalizedDescriptionKey: "无法创建 push-stream"]
+                userInfo: [NSLocalizedDescriptionKey: "Could not create the push stream"]
             )
         }
         pushStream = stream
@@ -743,7 +743,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
             throw NSError(
                 domain: "AzureSpeechManager",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "无法创建 push-stream 音频配置"]
+                userInfo: [NSLocalizedDescriptionKey: "Could not create the push-stream audio config"]
             )
         }
         return cfg
@@ -802,7 +802,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
                 if !self.accumulatedText.isEmpty {
                     // In silence-auto mode a pause already sends, so teaching the
                     // commit phrase here would be misleading — just show the text.
-                    let hint = self.silenceAutoCommit ? "" : "\n(说『请发送』结束)"
+                    let hint = self.silenceAutoCommit ? "" : "\n(say ‘send it’ to finish)"
                     self.listenState = .listening(partial: self.accumulatedText + hint)
                 }
             }
@@ -868,7 +868,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
         guard !cleaned.isEmpty else { return }
         guard isConfigured else { return }
         guard quota.canConsumeTTS(chars: cleaned.count) else {
-            let msg = "语音合成额度已用完（本月上限 \(SpeechQuota.ttsCap) 字符），已停止朗读。"
+            let msg = "TTS quota used up (monthly cap \(SpeechQuota.ttsCap) chars) — stopped speaking."
             speakState = .error(msg)
             onQuotaExhausted?(msg)
             return
@@ -933,10 +933,10 @@ final class AzureSpeechManager: NSObject, ObservableObject {
                         // access failures worth flagging the same way.
                         if code == .forbidden || code == .authenticationFailure
                             || code == .tooManyRequests || code == .connectionFailure {
-                            msg = "语音合成额度可能已用尽或鉴权失败（\(detail)）"
+                            msg = "TTS quota may be exhausted or auth failed (\(detail))"
                             self.onQuotaExhausted?(msg)
                         } else {
-                            msg = "语音合成出错：\(detail)"
+                            msg = "TTS error: \(detail)"
                         }
                         self.speakState = .error(msg)
                     }
@@ -971,13 +971,13 @@ final class AzureSpeechManager: NSObject, ObservableObject {
                 } catch {
                     Task { @MainActor in
                         guard self.isSpeaking else { return }
-                        self.speakState = .error("语音合成失败：\(error.localizedDescription)")
+                        self.speakState = .error("TTS failed: \(error.localizedDescription)")
                         self.finishSpeaking()
                     }
                 }
             }
         } catch {
-            speakState = .error("语音合成失败：\(error.localizedDescription)")
+            speakState = .error("TTS failed: \(error.localizedDescription)")
             finishSpeaking()
         }
     }

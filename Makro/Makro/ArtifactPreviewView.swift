@@ -72,7 +72,7 @@ struct ArtifactPreviewView: View {
             Group {
                 switch loadState {
             case .loading:
-                ProgressView("加载中…")
+                ProgressView("Loading…")
             case .htmlString(let html):
                 HTMLPreviewView(html: html)
             case .videoURL(let url):
@@ -114,11 +114,11 @@ struct ArtifactPreviewView: View {
                     }
                 }
                 .disabled(sharing)
-                .accessibilityLabel("分享")
+                .accessibilityLabel("Share")
             }
         }
-        .alert("分享失败", isPresented: $showShareError) {
-            Button("好", role: .cancel) {}
+        .alert("Share failed", isPresented: $showShareError) {
+            Button("OK", role: .cancel) {}
         } message: {
             Text(shareError ?? "")
         }
@@ -133,7 +133,7 @@ struct ArtifactPreviewView: View {
         if artifact.size > Self.sizeGateBytes {
             let mb = Double(artifact.size) / 1024 / 1024
             await MainActor.run {
-                loadState = .failed(String(format: "文件过大（%.0fMB）\n建议在桌面端查看", mb))
+                loadState = .failed(String(format: "File too large (%.0fMB)\nbest viewed on desktop", mb))
             }
             return
         }
@@ -183,7 +183,7 @@ struct ArtifactPreviewView: View {
             }
             if artifact.isZipLike {
                 await MainActor.run {
-                    loadState = .failed("压缩包请在桌面端打开\n（右上角分享可导出本文件）")
+                    loadState = .failed("Open archives on desktop\n(share via the top-right exports the file)")
                 }
                 return
             }
@@ -212,7 +212,7 @@ struct ArtifactPreviewView: View {
         defer { sharing = false }
         guard let artifactId = artifact.ledgerId else {
             await MainActor.run {
-                shareError = "此工件未入账本（遗留中心库文件），无法生成分享链接"
+                shareError = "This artifact is not in the ledger (legacy file) — no share link can be generated"
                 showShareError = true
             }
             return
@@ -261,7 +261,7 @@ struct ShareQRView: View {
                             .foregroundStyle(.tertiary)
                             .frame(width: 232, height: 232)
                     }
-                    Text("扫码在手机查看")
+                    Text("Scan to view on a phone")
                         .font(DS.text(14, .medium))
                         .foregroundStyle(.secondary)
 
@@ -277,7 +277,7 @@ struct ShareQRView: View {
                         Button {
                             UIPasteboard.general.string = url
                         } label: {
-                            Label("复制链接", systemImage: "doc.on.doc")
+                            Label("Copy link", systemImage: "doc.on.doc")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
@@ -287,7 +287,7 @@ struct ShareQRView: View {
                             // as plain text (no link preview).
                             if let u = URL(string: url) { presentShareSheet(items: [u]) }
                         } label: {
-                            Label("系统分享", systemImage: "square.and.arrow.up")
+                            Label("Share via…", systemImage: "square.and.arrow.up")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
@@ -298,11 +298,11 @@ struct ShareQRView: View {
                 .padding(.vertical, 28)
             }
             .background(DS.Canvas.app.ignoresSafeArea())
-            .navigationTitle("分享")
+            .navigationTitle("Share")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
+                    Button("Done") { dismiss() }
                 }
             }
         }
@@ -396,7 +396,7 @@ struct VideoPreviewView: View {
             if let player {
                 VideoPlayer(player: player)
             } else {
-                ProgressView("准备播放…")
+                ProgressView("Preparing to play…")
             }
         }
         .onAppear {
@@ -496,7 +496,7 @@ struct ImagePreviewView: View {
                 Image(systemName: "photo")
                     .font(.system(size: 28))
                     .foregroundStyle(DS.Ink.amber)
-                Text("图片解码失败（格式不支持？）")
+                Text("Image decode failed (unsupported format?)")
                     .font(DS.text(13))
                     .foregroundStyle(.secondary)
             }
