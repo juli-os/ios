@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" width="110" alt="Juli OS logo" />
+</p>
+
 # juli-os iOS — the remote for your agent OS
 
 The native iOS surface of the [juli-os](https://github.com/juli-os) ladder: a pocket remote for a self-hosted agent platform. Your Mac runs the engine; your phone runs this app.
