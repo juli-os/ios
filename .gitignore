@@ -4,3 +4,4 @@ node_modules/
 store/
 dist/
 .DS_Store
+Makro/Pods/

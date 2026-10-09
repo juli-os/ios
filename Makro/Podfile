@@ -4,3 +4,14 @@ target 'Makro' do
   use_frameworks!
   pod 'MicrosoftCognitiveServicesSpeech-iOS'
 end
+
+post_install do |installer|
+  # Xcode 27 rejects sub-15.0 deployment targets outright (pod ships 11.0).
+  installer.pods_project.targets.each do |t|
+    t.build_configurations.each do |cfg|
+      if cfg.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 15.0
+        cfg.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      end
+    end
+  end
+end
