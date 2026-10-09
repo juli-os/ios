@@ -1,0 +1,57 @@
+name: Makro
+options:
+  bundleIdPrefix: com.cybernagle
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+
+targets:
+  Makro:
+    type: application
+    platform: iOS
+    sources:
+      - path: Makro
+        excludes:
+          - ".omc/**"
+          - "Pods/**"
+          - "build/**"
+    settings:
+      base:
+        INFOPLIST_FILE: Makro/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Makro/Makro.entitlements
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.cybernagle.Makro
+        MARKETING_VERSION: "1.16.0"
+        CURRENT_PROJECT_VERSION: "19"
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    capabilities:
+      - com.apple.Push
+    dependencies:
+      - target: MakroShare
+        embed: true
+        codeSign: true
+
+  MakroShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: MakroShare
+    settings:
+      base:
+        INFOPLIST_FILE: MakroShare/Info.plist
+        CODE_SIGN_ENTITLEMENTS: MakroShare/MakroShare.entitlements
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.cybernagle.Makro.Share
+        MARKETING_VERSION: "1.16.0"
+        CURRENT_PROJECT_VERSION: "19"
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_IDENTITY: "Apple Development"
+        SKIP_INSTALL: "YES"

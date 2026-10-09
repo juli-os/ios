@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd /Users/naglezhang/Desktop/Code/Makro/ios/Makro/Makro\\necho \\\"=== deinit present? ===\\\"; rtk grep -n \\\"deinit\\\" AzureSpeechManager.swift\\necho \\\"=== isContinuous / in-call state vars ===...",
+  "error": "Exit code 1\n=== deinit present? ===\n0 matches for 'deinit'\n=== isContinuous / in-call state vars ===\n25 matches in 12 files:\n\n235:0:ListenState = .idle\n255:0:SPXSpeechRecognizer?\n261:0:Date?\n361:0:partial)\n386:0:transcript)\n392:0:\"\")\n405:0:self.accumulatedText)\n441:0:\"\")\n=== existing NotificationCenter usage in this file ===\n0 matches for 'NotificationCenter\\|addObserver'",
+  "timestamp": "2026-06-22T01:09:01.500Z",
+  "retry_count": 1
+}

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>app-store-connect</string>
+    <key>destination</key>
+    <string>upload</string>
+    <key>teamID</key>
+    <string></string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+    <key>uploadSymbols</key>
+    <!-- symbols off: Azure Speech pod 无 dSYM，上传符号会整单失败 -->
+    <false/>
+    <key>manageAppVersionAndBuildNumber</key>
+    <!-- build 号由 xcodebuild 导出/上传时自动分配，第二次起不再撞 ASC「build number already used」 -->
+    <true/>
+</dict>
+</plist>

@@ -1,0 +1,1081 @@
+import Foundation
+import AVFoundation
+import AudioToolbox
+import MicrosoftCognitiveServicesSpeech
+import Combine
+
+// MARK: - Quota tracking
+
+/// Local monthly quota tracker for Azure Speech F0 free tier.
+///
+/// Azure has no simple "remaining quota" API, so we meter locally: count TTS
+//  characters synthesized and STT seconds recorded, reset each calendar month.
+/// Hard caps sit below the published F0 limits so we stop *before* Azure rejects
+/// a request (which would otherwise surface as a 401/429 to the user).
+struct SpeechQuota: Equatable {
+    var ttsCharsUsed: Int
+    var sttSecondsUsed: Int
+
+    static let ttsCap = 480_000      // F0 = 500k/month; leave 20k margin
+    static let sttCapSeconds = 17_000 // F0 = 5h/month = 18000s; leave ~0.3h margin
+
+    var ttsRemaining: Int { max(0, Self.ttsCap - ttsCharsUsed) }
+    var sttRemainingSeconds: Int { max(0, Self.sttCapSeconds - sttSecondsUsed) }
+    var sttRemainingHours: Double { Double(sttRemainingSeconds) / 3600.0 }
+
+    var ttsRatio: Double { min(1.0, Double(ttsCharsUsed) / Double(Self.ttsCap)) }
+    var sttRatio: Double { min(1.0, Double(sttSecondsUsed) / Double(Self.sttCapSeconds)) }
+}
+
+final class SpeechQuotaTracker: ObservableObject {
+    static let shared = SpeechQuotaTracker()
+
+    @Published private(set) var quota: SpeechQuota
+
+    private let defaults = UserDefaults.standard
+    private enum Key {
+        static let month = "azure_speech_month"
+        static let tts = "azure_speech_tts_chars"
+        static let stt = "azure_speech_stt_seconds"
+    }
+
+    private init() {
+        quota = SpeechQuota(ttsCharsUsed: 0, sttSecondsUsed: 0)
+        reload()
+    }
+
+    /// Current calendar month key, e.g. "2026-06".
+    private var currentMonth: String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM"
+        return f.string(from: Date())
+    }
+
+    /// Reload from disk; auto-resets counters when the calendar month rolls over.
+    func reload() {
+        let storedMonth = defaults.string(forKey: Key.month) ?? currentMonth
+        if storedMonth != currentMonth {
+            // New month → wipe persisted counters.
+            defaults.set(currentMonth, forKey: Key.month)
+            defaults.set(0, forKey: Key.tts)
+            defaults.set(0, forKey: Key.stt)
+            quota = SpeechQuota(ttsCharsUsed: 0, sttSecondsUsed: 0)
+        } else {
+            quota = SpeechQuota(
+                ttsCharsUsed: defaults.integer(forKey: Key.tts),
+                sttSecondsUsed: defaults.integer(forKey: Key.stt)
+            )
+        }
+    }
+
+    func canConsumeTTS(chars: Int) -> Bool {
+        reload()
+        return quota.ttsCharsUsed + chars <= SpeechQuota.ttsCap
+    }
+
+    func canConsumeSTT(seconds: Int) -> Bool {
+        reload()
+        return quota.sttSecondsUsed + seconds <= SpeechQuota.sttCapSeconds
+    }
+
+    func consumeTTS(chars: Int) {
+        reload()
+        let used = quota.ttsCharsUsed + chars
+        defaults.set(used, forKey: Key.tts)
+        DispatchQueue.main.async { self.quota.ttsCharsUsed = used }
+    }
+
+    func consumeSTT(seconds: Int) {
+        reload()
+        let used = quota.sttSecondsUsed + seconds
+        defaults.set(used, forKey: Key.stt)
+        DispatchQueue.main.async { self.quota.sttSecondsUsed = used }
+    }
+
+    /// Emergency/debug reset of local counters.
+    func reset() {
+        defaults.set(currentMonth, forKey: Key.month)
+        defaults.set(0, forKey: Key.tts)
+        defaults.set(0, forKey: Key.stt)
+        quota = SpeechQuota(ttsCharsUsed: 0, sttSecondsUsed: 0)
+    }
+}
+
+// MARK: - Speakable text extraction
+
+/// Strips an assistant message down to what's worth reading aloud, so we don't
+/// burn TTS character quota on code blocks, markdown syntax, mentions, or URLs.
+enum SpeakableText {
+    /// Single TTS utterance cap — long replies are truncated to stay snappy and cheap.
+    static let maxChars = 800
+
+    static func extract(from raw: String) -> String {
+        // Drop fenced code blocks (```...```) entirely.
+        let withoutCode = raw.components(separatedBy: "```")
+            .enumerated()
+            .filter { $0.offset % 2 == 0 } // even indices = prose, odd = code
+            .map { $0.element }
+            .joined(separator: " ")
+
+        var lines: [String] = []
+        for rawLine in withoutCode.components(separatedBy: "\n") {
+            var line = rawLine
+            // Drop inline code spans `...`.
+            line = stripInlineCode(from: line)
+            // Drop bare URLs.
+            line = stripURLs(from: line)
+            // Drop markdown heading/list/quote markers.
+            line = stripMarkdownMarkers(from: line)
+            // Drop @session / &session routing directives.
+            line = stripDirectives(from: line)
+            // Collapse markdown emphasis **bold** / *italic* / _underline_.
+            line = stripEmphasis(from: line)
+
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                lines.append(trimmed)
+            }
+        }
+
+        var result = lines.joined(separator: ". ")
+        if result.count > maxChars {
+            let end = result.index(result.startIndex, offsetBy: maxChars)
+            result = String(result[result.startIndex..<end]) + "…回复过长，已截断"
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func stripInlineCode(from line: String) -> String {
+        var s = line
+        while let r = s.range(of: "`[^`]+`", options: .regularExpression) {
+            let inner = s[r]
+                .replacingOccurrences(of: "`", with: "")
+            s.replaceSubrange(r, with: inner)
+        }
+        return s
+    }
+
+    private static func stripURLs(from line: String) -> String {
+        line.replacingOccurrences(
+            of: #"https?://[^\s)]+"#,
+            with: "链接",
+            options: .regularExpression
+        )
+    }
+
+    private static func stripMarkdownMarkers(from line: String) -> String {
+        var s = line.trimmingCharacters(in: .whitespaces)
+        let prefixes: [(String, Int)] = [
+            ("### ", 4), ("## ", 3), ("# ", 2),
+            ("- ", 2), ("* ", 2), ("> ", 2),
+        ]
+        for (prefix, len) in prefixes where s.hasPrefix(prefix) {
+            s = String(s.dropFirst(len))
+            break
+        }
+        // Numbered list "1. "
+        if let dot = s.range(of: ". "), s.range(of: "^[0-9]+\\. ", options: .regularExpression) != nil {
+            s = String(s[dot.upperBound...])
+        }
+        // Horizontal rules made of - * _.
+        let only = s.filter { !$0.isWhitespace }
+        if only.count >= 3, only.allSatisfy({ $0 == "-" || $0 == "*" || $0 == "_" }) {
+            return ""
+        }
+        return s
+    }
+
+    private static func stripDirectives(from line: String) -> String {
+        line.replacingOccurrences(
+            of: #"[&@]\S+"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+
+    private static func stripEmphasis(from line: String) -> String {
+        var s = line
+        for pat in [#"\*\*([^*]+)\*\*"#, #"\*([^*]+)\*"#, #"_([^_]+)_"#, #"__([^_]+)__"#] {
+            // Replace iteratively in case of overlapping matches.
+            while let r = s.range(of: pat, options: .regularExpression) {
+                let inner = s[r].filter { $0 != "*" && $0 != "_" }
+                s.replaceSubrange(r, with: inner)
+            }
+        }
+        return s
+    }
+}
+
+// MARK: - Manager
+
+/// Coordinates Azure Speech STT + TTS for voice conversation.
+///
+/// STT: continuous recognition from the mic; a trailing-silence timer treats
+///   ~1.5s of no new final result as "user finished speaking", stops, and
+///   delivers the accumulated text.
+/// TTS: streaming synthesis via SPXSpeechSynthesizer; audio chunks are pushed
+///   to an AVAudioEngine player for low-latency playback.
+/// Both paths meter against SpeechQuotaTracker and refuse to run when the
+/// local monthly cap is reached.
+@MainActor
+final class AzureSpeechManager: NSObject, ObservableObject {
+
+    enum ListenState: Equatable {
+        case idle
+        case listening(partial: String)
+        case error(String)
+    }
+
+    enum SpeakState: Equatable {
+        case idle
+        case speaking
+        case error(String)
+    }
+
+    @Published var listenState: ListenState = .idle
+    @Published var speakState: SpeakState = .idle
+
+    /// Delivered when STT produces a final utterance (user finished a turn).
+    var onRecognized: ((String) -> Void)?
+    /// Delivered on the first partial recognition of a NEW utterance. Used in
+    /// call mode to detect the user starting to speak (so TTS can be interrupted).
+    var onPartialSpeech: (() -> Void)?
+    /// Delivered when TTS finishes a full utterance.
+    var onSpeakFinished: (() -> Void)?
+    /// Delivered when a quota wall is hit; the message is user-facing.
+    var onQuotaExhausted: ((String) -> Void)?
+    /// Delivered (call/commit mode) when the hard max-duration window elapses
+    /// without a commit phrase, so the UI can nudge the user. Never auto-sends.
+    var onMaxDurationHint: (() -> Void)?
+
+    private let quota = SpeechQuotaTracker.shared
+    private let config: Config
+
+    // STT state
+    private var recognizer: SPXSpeechRecognizer?
+    private var isListening = false
+    /// Continuous mode (phone-call style): the recognizer keeps running across
+    /// turns. Each silence/recognized cycle delivers text via onRecognized but
+    /// does NOT stop the recognizer — only stopListening() does.
+    private var isContinuous = false
+    private var recognitionStart: Date?
+    private var silenceTimer: Timer?
+    private let silenceInterval: TimeInterval = 2.5
+    private var accumulatedText = ""
+    /// While speaking (TTS), we suspend listening to avoid the assistant's own
+    /// voice being captured as input. Resumed when playback ends.
+    private var isListeningSuspended = false
+
+    // VAD-gated push-stream STT state (call / commit mode). The recognizer pulls
+    // PCM from the push stream; only bytes the local VAD emits (real speech +
+    // pre-roll + trailing hangover) ever reach it, so silence costs no quota.
+    private var sttAudioEngine: AVAudioEngine?
+    private var vad: VoiceActivityDetector?
+    private var pushStream: SPXPushAudioInputStream?
+    private var pushedByteCount: Int64 = 0
+    private var commitMode = false
+    /// Silence auto-commit (闲聊 mode): the VAD push stream and commit-phrase
+    /// detector stay armed (a spoken phrase still commits instantly), but the
+    /// trailing-silence timer ALSO delivers the turn. Pure commit mode (查询/
+    /// 落实) only ever sends on the phrase.
+    private var silenceAutoCommit = false
+    private var commitDetector: CommitPhraseDetector?
+    private var maxDurationTimer: Timer?
+    private let maxDuration: TimeInterval = 60
+
+    // Audio-session recovery. After an interruption (Siri, a real phone call)
+    // or a device-route change (headphones unplugged), the mic + push stream go
+    // silent unless we reconfigure + restart — which is why a call looked dead
+    // after Siri testing. `suppressAudioResume()` is called on a deliberate end
+    // so an interruption that fires *during* "hang up" can't restart a call the
+    // user just ended.
+    private var resumeAfterInterruption = false
+    // Dedupe guard: a final "recognized" result can land AFTER the trailing-
+    // silence timer already delivered the same utterance (network jitter);
+    // without this 闲聊 would send the sentence twice.
+    private var lastDeliveredText = ""
+    private var lastDeliveredAt: Date?
+    /// True while the call is user-paused: audio interruptions / route changes
+    /// must not auto-restart the recognizer (that would resurrect a call the
+    /// user deliberately silenced). Managed by ChatViewModel pause/resume.
+    var suspendAutoRestart = false
+    private var audioObservers: [NSObjectProtocol] = []
+
+    // TTS state
+    private var synthesizer: SPXSpeechSynthesizer?
+    private var audioEngine: AVAudioEngine?
+    private var playerNode: AVAudioPlayerNode?
+    private var audioFormat: AVAudioFormat?
+    private var isSpeaking = false
+
+    init(config: Config = .shared) {
+        self.config = config
+        super.init()
+        registerAudioSessionObservers()
+    }
+
+    deinit {
+        audioObservers.forEach { NotificationCenter.default.removeObserver($0) }
+    }
+
+    // MARK: Audio session recovery (interruption + route change)
+
+    private func registerAudioSessionObservers() {
+        let nc = NotificationCenter.default
+        audioObservers.append(nc.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            self?.handleAudioSessionInterruption(note)
+        })
+        audioObservers.append(nc.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            self?.handleAudioSessionRouteChange(note)
+        })
+    }
+
+    private func handleAudioSessionInterruption(_ note: Notification) {
+        guard let info = note.userInfo,
+              let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        switch type {
+        case .began:
+            // Only auto-resume an active continuous (call) session; one-shot
+            // voice outside a call is left for the user to re-tap.
+            if isListening && isContinuous {
+                resumeAfterInterruption = true
+            }
+        case .ended:
+            guard resumeAfterInterruption else { return }
+            resumeAfterInterruption = false
+            // suppressAudioResume() covers the deliberate-end case (button /
+            // Siri "hang up"); any other interruption that reaches .ended while
+            // a call was active should resume, so we don't gate on the (removed
+            // in modern SDKs) shouldResume hint.
+            restartRecognition()
+        @unknown default:
+            break
+        }
+    }
+
+    private func handleAudioSessionRouteChange(_ note: Notification) {
+        guard let info = note.userInfo,
+              let raw = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: raw) else { return }
+        // A device disappeared mid-call (e.g. headphones unplugged): the mic
+        // tap is bound to the old route, so restart under the new one.
+        if reason == .oldDeviceUnavailable, isListening, isContinuous {
+            restartRecognition()
+        }
+    }
+
+    /// Reconfigure the audio session and start a fresh recognizer so audio
+    /// flows again after an interruption / route change. Tears down WITHOUT
+    /// delivering the interrupted partial (no half-utterance sent).
+    private func restartRecognition() {
+        guard !suspendAutoRestart else { return }
+        // Capture the LIVE mode flags before the tear-down resets them. A
+        // route change can arrive with no prior interruption, so mirrors
+        // captured at interruption-.began would be stale (or still false) and
+        // would silently downgrade a commit-mode call to legacy mode.
+        let commit = commitMode
+        let silenceAuto = silenceAutoCommit
+        // startListening clears the suspended flag; re-apply it or a restart
+        // while muted (or while TTS plays) would let results through.
+        let wasSuspended = isListeningSuspended
+        fullyStopRecognizer()
+        startListening(continuous: true, commit: commit, silenceAuto: silenceAuto)
+        if wasSuspended { isListeningSuspended = true }
+    }
+
+    /// Called on a deliberate call end (button / Siri "hang up" / quota) so a
+    /// pending interruption-resume cannot restart a call the user ended.
+    func suppressAudioResume() {
+        resumeAfterInterruption = false
+    }
+
+    var isConfigured: Bool {
+        !config.azureKey.isEmpty && !config.azureRegion.isEmpty
+    }
+
+    // MARK: STT
+
+    /// Begin listening. In `continuous` mode (phone-call style) the recognizer
+    /// keeps running across turns: each silence/recognized cycle delivers text
+    /// via onRecognized but does NOT stop the mic. Use stopListening() to end.
+    func startListening(continuous: Bool = false, commit: Bool = false, silenceAuto: Bool = false) {
+        guard !isListening else { return }
+        guard isConfigured else {
+            listenState = .error("请先在设置里填写 Azure Speech key 和 region")
+            return
+        }
+        self.commitMode = commit
+        self.silenceAutoCommit = commit && silenceAuto
+        // Best-effort reserve check: assume a turn is ~30s. If even that can't
+        // fit, refuse up front rather than cutting off mid-sentence.
+        guard quota.canConsumeSTT(seconds: 30) else {
+            let msg = "语音识别额度已用完（本月上限 \(SpeechQuota.sttCapSeconds / 3600) 小时），已停止。"
+            listenState = .error(msg)
+            onQuotaExhausted?(msg)
+            return
+        }
+
+        do {
+            let speechCfg = try SPXSpeechConfiguration(
+                subscription: config.azureKey,
+                region: config.azureRegion
+            )
+            // zh-CN favours Mandarin input, which matches the app's audience.
+            speechCfg.speechRecognitionLanguage = "zh-CN"
+            // Activate the session early so commit mode can read the real
+            // hardware sample rate when it builds the push stream.
+            try configureAudioSession()
+            let audioCfg: SPXAudioConfiguration
+            if commit {
+                // Push-stream path: the recognizer reads PCM we push (gated by
+                // the VAD) instead of the default mic.
+                audioCfg = try setupPushStreamSTT()
+            } else {
+                audioCfg = SPXAudioConfiguration()
+            }
+            let recognizer = try SPXSpeechRecognizer(
+                speechConfiguration: speechCfg,
+                audioConfiguration: audioCfg
+            )
+            self.recognizer = recognizer
+            self.isContinuous = continuous
+            accumulatedText = ""
+
+            // Partial results ("recognizing"): update the live display and
+            // reset the silence timer. We do NOT stop here — a partial result
+            // is mid-phrase, not end-of-turn.
+            recognizer.addRecognizingEventHandler { [weak self] _, evt in
+                guard let self else { return }
+                Task { @MainActor in
+                    // Ignore while suspended (mute button in call mode).
+                    guard !self.isListeningSuspended else { return }
+                    if let partial = evt.result.text, !partial.isEmpty {
+                        // The first partial of a new utterance signals the user
+                        // started speaking — fire onPartialSpeech so call mode
+                        // can interrupt any TTS still playing. We detect "first
+                        // partial" by accumulatedText being empty (no final
+                        // result has landed yet this turn).
+                        if self.accumulatedText.isEmpty {
+                            self.onPartialSpeech?()
+                        }
+                        self.listenState = .listening(partial: partial)
+                        self.resetSilenceTimer()
+                    }
+                }
+            }
+
+            // Final per-sentence result ("recognized"): append to the
+            // accumulated transcript and reset the silence timer. A continuous
+            // recognizer fires this once PER SENTENCE, so we must keep
+            // listening — it is NOT an end-of-turn signal.
+            recognizer.addRecognizedEventHandler { [weak self] _, evt in
+                guard let self else { return }
+                Task { @MainActor in
+                    // Ignore while suspended (TTS is playing in call mode).
+                    guard !self.isListeningSuspended else { return }
+                    guard let text = evt.result.text, !text.isEmpty else {
+                        // Empty final result — nothing to accumulate. In commit
+                        // mode silence never sends, so there's nothing else to do.
+                        return
+                    }
+                    // A late final result for an utterance the silence timer
+                    // already delivered would re-accumulate and re-send the
+                    // same sentence. Skip it while it's just the tail of what
+                    // went out moments ago.
+                    if let lastAt = self.lastDeliveredAt,
+                       Date().timeIntervalSince(lastAt) < 1.5,
+                       self.lastDeliveredText.hasSuffix(text) {
+                        return
+                    }
+                    if self.commitMode, let detector = self.commitDetector {
+                        // Commit mode: a spoken commit phrase ends a turn. In
+                        // silence-auto mode (闲聊) the trailing-silence timer is
+                        // ALSO armed, so plain speech commits after a pause.
+                        switch detector.ingest(text) {
+                        case .accumulate(let transcript):
+                            self.accumulatedText = transcript
+                            self.listenState = .listening(partial: transcript)
+                            self.resetSilenceTimer()
+                        case .commit(let payload):
+                            self.accumulatedText = ""
+                            if payload.isEmpty {
+                                // User said only the phrase with nothing before
+                                // it — nothing to send, keep listening.
+                                self.listenState = .listening(partial: "")
+                            } else {
+                                self.listenState = .idle
+                                self.deliverCommit(payload)
+                            }
+                        }
+                    } else {
+                        // Legacy (non-commit) path: accumulate and let the
+                        // trailing-silence timer deliver the turn.
+                        if !self.accumulatedText.isEmpty {
+                            self.accumulatedText += " "
+                        }
+                        self.accumulatedText += text
+                        self.listenState = .listening(partial: self.accumulatedText)
+                        self.resetSilenceTimer()
+                    }
+                }
+            }
+
+            recognizer.addCanceledEventHandler { [weak self] _, evt in
+                guard let self else { return }
+                Task { @MainActor in
+                    // reason == .error means a genuine failure (auth, quota,
+                    // network, mic); .endOfStream is a normal session close.
+                    if evt.reason == .error {
+                        self.listenState = .error("语音识别出错：\(evt.errorDetails ?? "")")
+                    }
+                    // Always fully stop on cancel, even in continuous mode.
+                    self.stopListening()
+                }
+            }
+
+            recognitionStart = Date()
+            // Configure the shared audio session BEFORE starting recognition so
+            // the mic runs under .playAndRecord/.voiceChat (echo cancellation +
+            // background survival). Must precede startContinuousRecognition().
+            try configureAudioSession()
+            if commit {
+                // Commit mode: arm the commit-phrase detector, start OUR mic
+                // engine (which feeds the VAD + push stream), and arm the hard
+                // max-duration nudge. The recognizer pulls speech bytes from the
+                // push stream — silence never reaches it, so it isn't billed.
+                commitDetector = CommitPhraseDetector(phrases: config.commitPhraseList)
+                try startMicTap()
+                startMaxDurationTimer()
+            }
+            try recognizer.startContinuousRecognition()
+            isListening = true
+            isListeningSuspended = false
+            listenState = .listening(partial: "")
+            resetSilenceTimer()
+        } catch {
+            listenState = .error("启动识别失败：\(error.localizedDescription)")
+        }
+    }
+
+    /// Stop listening and deliver whatever was recognized so far. Fully ends
+    /// the recognizer regardless of continuous mode.
+    func stopListening() {
+        guard isListening else { return }
+        deliverCurrentTurn()
+        fullyStopRecognizer()
+    }
+
+    /// Deliver the current accumulated/partial transcript via onRecognized and
+    /// reset the buffers. In continuous mode the recognizer keeps running.
+    private func deliverCurrentTurn() {
+        silenceTimer?.invalidate()
+        silenceTimer = nil
+
+        // Prefer accumulated final results; fall back to the last partial shown
+        // so a fast stop still sends what the user said.
+        var text = accumulatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty, let partial = currentPartialText() {
+            text = partial.trimmingCharacters(in: .whitespacesAndNewlines)
+            // The partial never went through the detector, so a spoken commit
+            // phrase can still ride along (e.g. "…请发送" then tapping 暂停
+            // before the final result lands). Strip it the same way ingest
+            // would, so what we send matches what a commit would have sent.
+            if silenceAutoCommit, !text.isEmpty,
+               case .commit(let payload) = CommitPhraseDetector(phrases: config.commitPhraseList).ingest(text) {
+                text = payload
+            }
+        }
+        accumulatedText = ""
+        // The detector keeps its own running transcript; clear it whenever we
+        // clear ours or the next ingest would resurrect already-sent text.
+        commitDetector?.reset()
+        if isContinuous {
+            // Keep the live partial display; a new turn will overwrite it.
+            listenState = .listening(partial: "")
+        }
+        // In pure commit mode the commit phrase is the ONLY send trigger — a
+        // manual stop or trailing silence must not send un-committed text.
+        // Silence-auto mode (闲聊) delivers on the timer like legacy mode.
+        if (!commitMode || silenceAutoCommit), !text.isEmpty {
+            // Same ack as the phrase-commit path (deliverCommit): the silence
+            // auto-send is instantaneous and silent without it, so the user
+            // gets no audible cue that their turn was sent and Makro is
+            // thinking. One ack per delivered turn — the dedupe guard above
+            // keeps a late "recognized" result from re-delivering this text.
+            playCommitAck()
+            lastDeliveredText = text
+            lastDeliveredAt = Date()
+            onRecognized?(text)
+        }
+    }
+
+    /// Deliver a committed (phrase-stripped) payload: play the ack, then fire
+    /// onRecognized. Used only in commit mode, from the recognized handler.
+    private func deliverCommit(_ payload: String) {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        playCommitAck()
+        onRecognized?(trimmed)
+    }
+
+    /// Tear down the recognizer and stop metering audio time.
+    private func fullyStopRecognizer() {
+        guard isListening else { return }
+        isListening = false
+        isContinuous = false
+
+        let recognizer = self.recognizer
+        self.recognizer = nil
+        // stopContinuousRecognition can block for several seconds on iOS; run
+        // it off the main thread so the UI doesn't freeze.
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? recognizer?.stopContinuousRecognition()
+        }
+
+        // Metering. Commit (push-stream) mode bills ONLY the speech bytes we
+        // actually pushed — silence costs nothing — so convert the byte count to
+        // seconds at 16kHz/16-bit/mono. Legacy mode keeps the wall-clock meter.
+        if commitMode {
+            let seconds = Int(Double(pushedByteCount) / (16000.0 * 2.0))
+            if seconds > 0 { quota.consumeSTT(seconds: seconds) }
+            pushedByteCount = 0
+            stopMicTap()
+            vad = nil
+            commitDetector = nil
+            maxDurationTimer?.invalidate()
+            maxDurationTimer = nil
+            commitMode = false
+            silenceAutoCommit = false
+        } else if let start = recognitionStart {
+            let seconds = Int(Date().timeIntervalSince(start))
+            quota.consumeSTT(seconds: max(1, seconds))
+            recognitionStart = nil
+        }
+        listenState = .idle
+    }
+
+    /// Pull the live partial transcript out of the current listen state.
+    private func currentPartialText() -> String? {
+        if case .listening(let partial) = listenState, !partial.isEmpty {
+            return partial
+        }
+        return nil
+    }
+
+    private func resetSilenceTimer() {
+        // Pure commit mode drives sends off the commit phrase, not trailing
+        // silence. Silence-auto mode (闲聊) keeps the timer armed as fallback.
+        if commitMode && !silenceAutoCommit { return }
+        silenceTimer?.invalidate()
+        silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceInterval, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isListening else { return }
+                // Silence window elapsed with no new speech → deliver the turn.
+                // In single-shot mode this also stops the recognizer; in
+                // continuous (call) mode it only flushes the current turn and
+                // keeps listening for the next one.
+                self.deliverCurrentTurn()
+                if !self.isContinuous {
+                    self.fullyStopRecognizer()
+                } else {
+                    // Restart the silence watch for the next turn.
+                    self.resetSilenceTimer()
+                }
+            }
+        }
+    }
+
+    // MARK: VAD-gated push-stream STT (commit mode)
+
+    /// Build a push-stream-backed audio config: the recognizer reads PCM we push
+    /// (gated by the VAD) instead of the default mic. Also constructs the VAD and
+    /// stores the target format used by the mic tap's converter.
+    private func setupPushStreamSTT() throws -> SPXAudioConfiguration {
+        // The input tap MUST run at the hardware sample rate (iOS will not
+        // resample an input tap — requesting a different rate crashes the tap).
+        // So we match the push stream to the mic's actual rate and only convert
+        // Float32→Int16 ourselves (same rate, no resampler). This avoids both
+        // the tap-format crash and the per-frame resampler starvation.
+        let hwRate = max(8000, Int(AVAudioSession.sharedInstance().sampleRate))
+        guard let fmt = SPXAudioStreamFormat(
+            usingPCMWithSampleRate: UInt(hwRate),
+            bitsPerSample: 16,
+            channels: 1
+        ) else {
+            throw NSError(
+                domain: "AzureSpeechManager",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "无法创建音频流格式"]
+            )
+        }
+        guard let stream = SPXPushAudioInputStream(audioFormat: fmt) else {
+            throw NSError(
+                domain: "AzureSpeechManager",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "无法创建 push-stream"]
+            )
+        }
+        pushStream = stream
+        vad = VoiceActivityDetector(
+            config: .init(
+                threshold: config.vadThreshold,
+                preRollFrames: 30,
+                minActiveFrames: 3,
+                hangoverFrames: 40
+            ),
+            onAudio: { [weak self] data in
+                // Called on the VAD's serial queue, in frame order. Push ONLY the
+                // speech bytes the VAD chose to emit; silence never reaches here,
+                // so it isn't metered or billed.
+                guard let self, let stream = self.pushStream else { return }
+                stream.write(data)
+                self.pushedByteCount += Int64(data.count)
+            }
+        )
+        vad?.delegate = self
+        // initWithStreamInput: imports as a failable initializer.
+        guard let cfg = SPXAudioConfiguration(streamInput: stream) else {
+            throw NSError(
+                domain: "AzureSpeechManager",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "无法创建 push-stream 音频配置"]
+            )
+        }
+        return cfg
+    }
+
+    /// Install a mic input tap on a dedicated engine at the hardware format
+    /// (format: nil — iOS won't resample an input tap), convert Float32→Int16
+    /// ourselves at the SAME rate, and feed the VAD (which decides what reaches
+    /// the push stream). Diagnostics log the first few frames so we can confirm
+    /// speech-level audio is actually reaching the VAD.
+    private func startMicTap() throws {
+        let engine = AVAudioEngine()
+        sttAudioEngine = engine
+        let input = engine.inputNode
+        input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+            guard let self else { return }
+            let n = Int(buffer.frameLength)
+            guard n > 0, let src = buffer.floatChannelData?[0] else { return }
+            // Float32 → Int16 at the same sample rate (no resampling). Clamp.
+            var samples = [Int16](repeating: 0, count: n)
+            for i in 0..<n {
+                var v = Double(src[i])
+                if v > 1 { v = 1 } else if v < -1 { v = -1 }
+                samples[i] = Int16(v * 32767.0)
+            }
+            let data = Data(bytes: samples, count: n * MemoryLayout<Int16>.size)
+            self.vad?.process(data)
+        }
+
+        try engine.start()
+    }
+
+    /// Remove the tap, stop the engine, and close the push stream so the
+    /// recognizer stops receiving audio. Idempotent.
+    private func stopMicTap() {
+        if let engine = sttAudioEngine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
+        sttAudioEngine = nil
+        // Nil before close so the onAudio closure can no longer touch a
+        // closed stream.
+        let stream = pushStream
+        pushStream = nil
+        stream?.close()
+    }
+
+    /// Arm the hard max-duration nudge. Never auto-sends (that would reintroduce
+    /// the mid-thought misfire this whole refactor exists to fix); only nudges.
+    private func startMaxDurationTimer() {
+        maxDurationTimer?.invalidate()
+        maxDurationTimer = Timer.scheduledTimer(withTimeInterval: maxDuration, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.onMaxDurationHint?()
+                if !self.accumulatedText.isEmpty {
+                    // In silence-auto mode a pause already sends, so teaching the
+                    // commit phrase here would be misleading — just show the text.
+                    let hint = self.silenceAutoCommit ? "" : "\n(说『请发送』结束)"
+                    self.listenState = .listening(partial: self.accumulatedText + hint)
+                }
+            }
+        }
+    }
+
+    /// Short acknowledgement sound at the commit moment so the user hears that
+    /// their voice turn is being processed. v1 uses a system sound (no bundled
+    /// asset, no Xcode build-phase change). Swap for a bundled .caf +
+    /// AVAudioPlayer if Bluetooth routing proves unreliable.
+    func playCommitAck() {
+        AudioServicesPlaySystemSound(1057)  // "Tink" — short, unobtrusive blip
+    }
+
+    // MARK: Call-mode mic suspension
+
+    /// Hot-switch silence auto-commit mid-call (mode switch 闲聊 ↔ 查询/落实)
+    /// without restarting the recognizer. The commit-phrase detector stays
+    /// armed either way; this only arms/disarms the trailing-silence fallback.
+    /// No-op unless currently listening in commit mode.
+    func setSilenceAutoCommit(_ on: Bool) {
+        silenceAutoCommit = on && commitMode
+        guard isListening, !isListeningSuspended else { return }
+        if silenceAutoCommit {
+            resetSilenceTimer()
+        } else {
+            silenceTimer?.invalidate()
+            silenceTimer = nil
+        }
+    }
+
+    /// Suspend listening while TTS plays (call mode), to avoid capturing the
+    /// assistant's own voice. No-op if not currently listening.
+    func suspendListening() {
+        guard isListening, !isListeningSuspended else { return }
+        isListeningSuspended = true
+        // Flush any in-flight turn, then pause without tearing down — the
+        // recognizer keeps running but we ignore further results until resumed.
+        silenceTimer?.invalidate()
+        silenceTimer = nil
+    }
+
+    /// Resume listening after TTS finishes (call mode).
+    func resumeListening() {
+        guard isListening, isListeningSuspended else { return }
+        isListeningSuspended = false
+        // Clear the manager mirror but KEEP the detector's transcript: the
+        // next .accumulate re-syncs accumulatedText from the detector, so
+        // un-committed speech survives the suspend/resume cycle. (In commit
+        // mode the detector only ever holds text that was NOT yet delivered —
+        // ingest flushes itself on commit, and deliverCurrentTurn resets it —
+        // so there is nothing stale to resurrect.)
+        accumulatedText = ""
+        listenState = .listening(partial: "")
+        resetSilenceTimer()
+    }
+
+    // MARK: TTS
+
+    /// Synthesize and play `text`. Refuses if quota is exhausted or text is empty.
+    func speak(_ text: String) {
+        let cleaned = SpeakableText.extract(from: text)
+        guard !cleaned.isEmpty else { return }
+        guard isConfigured else { return }
+        guard quota.canConsumeTTS(chars: cleaned.count) else {
+            let msg = "语音合成额度已用完（本月上限 \(SpeechQuota.ttsCap) 字符），已停止朗读。"
+            speakState = .error(msg)
+            onQuotaExhausted?(msg)
+            return
+        }
+
+        stopSpeaking()
+
+        do {
+            let speechCfg = try SPXSpeechConfiguration(
+                subscription: config.azureKey,
+                region: config.azureRegion
+            )
+            speechCfg.speechSynthesisLanguage = "zh-CN"
+            // Deliberately do NOT pin a voice name — custom names like
+            // "zh-CN-XiaoxiaoMultilingual" may be unavailable in some regions
+            // and cause synthesis to fail on first use. Letting the service
+            // pick the default zh-CN voice is the reliable path; a specific
+            // voice can be re-added once the region's voice list is confirmed.
+            // SPXSpeechSynthesizer requires an explicit audio configuration.
+            let audioCfg = SPXAudioConfiguration()
+            let synth = try SPXSpeechSynthesizer(
+                speechConfiguration: speechCfg,
+                audioConfiguration: audioCfg
+            )
+            self.synthesizer = synth
+
+            synth.addSynthesizingEventHandler { [weak self] (_: SPXSpeechSynthesizer, evt: SPXSpeechSynthesisEventArgs) in
+                guard let self else { return }
+                Task { @MainActor in
+                    if let audio = evt.result.audioData {
+                        self.feedAudio(audio)
+                    }
+                }
+            }
+            synth.addSynthesisCompletedEventHandler { [weak self] (_: SPXSpeechSynthesizer, _: SPXSpeechSynthesisEventArgs) in
+                guard let self else { return }
+                Task { @MainActor in
+                    self.quota.consumeTTS(chars: cleaned.count)
+                    self.finishSpeaking()
+                    self.onSpeakFinished?()
+                }
+            }
+            synth.addSynthesisCanceledEventHandler { [weak self] (_: SPXSpeechSynthesizer, evt: SPXSpeechSynthesisEventArgs) in
+                guard let self else { return }
+                Task { @MainActor in
+                    // Extract error details via the cancellation helper — the
+                    // synthesis result itself only carries a `reason`, not an
+                    // error code/details. CancellationDetails decodes the cause.
+                    let details = try? SPXSpeechSynthesisCancellationDetails(
+                        fromCanceledSynthesisResult: evt.result
+                    )
+                    let reason = details?.reason
+                    let detail = details?.errorDetails ?? ""
+                    // .error = genuine failure (auth/quota/voice-not-found);
+                    // .endOfStream = intentional stop (user tapped stop, or a
+                    // new speak() interrupted this one) → stay silent.
+                    if reason == .error {
+                        let msg: String
+                        let code = details?.errorCode
+                        // Forbidden is the actual "F0 free quota exhausted"
+                        // signal; auth/connection/too-many-requests are related
+                        // access failures worth flagging the same way.
+                        if code == .forbidden || code == .authenticationFailure
+                            || code == .tooManyRequests || code == .connectionFailure {
+                            msg = "语音合成额度可能已用尽或鉴权失败（\(detail)）"
+                            self.onQuotaExhausted?(msg)
+                        } else {
+                            msg = "语音合成出错：\(detail)"
+                        }
+                        self.speakState = .error(msg)
+                    }
+                    self.finishSpeaking()
+                }
+            }
+
+            try startAudioEngine()
+            isSpeaking = true
+            speakState = .speaking
+            // speakText blocks until synthesis completes — run it off the main
+            // actor so the UI stays responsive. The Synthesizing/Completed/
+            // Canceled handlers hop back to @MainActor via Task { @MainActor }.
+            let synthRef = synth
+            let cleanedCount = cleaned.count
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let result = try synthRef.speakText(cleaned)
+                    // speakText returns once synthesis is done. If no handler
+                    // already finalized, surface the outcome here.
+                    Task { @MainActor in
+                        guard self.isSpeaking else { return }
+                        // .synthesizingAudioCompleted = success → meter + finalize.
+                        // Anything else (canceled/error) → the Canceled handler
+                        // owns that path; only finalize here on clean success.
+                        if result.reason == .synthesizingAudioCompleted {
+                            self.quota.consumeTTS(chars: cleanedCount)
+                            self.finishSpeaking()
+                            self.onSpeakFinished?()
+                        }
+                    }
+                } catch {
+                    Task { @MainActor in
+                        guard self.isSpeaking else { return }
+                        self.speakState = .error("语音合成失败：\(error.localizedDescription)")
+                        self.finishSpeaking()
+                    }
+                }
+            }
+        } catch {
+            speakState = .error("语音合成失败：\(error.localizedDescription)")
+            finishSpeaking()
+        }
+    }
+
+    func stopSpeaking() {
+        guard isSpeaking else { return }
+        finishSpeaking()
+    }
+
+    private func finishSpeaking() {
+        isSpeaking = false
+        synthesizer = nil
+        playerNode?.stop()
+        if audioEngine?.isRunning == true {
+            audioEngine?.stop()
+        }
+        speakState = .idle
+    }
+
+    // MARK: Audio playback
+
+    /// Configure the shared AVAudioSession for simultaneous recording + playback.
+    /// `.playAndRecord` with `.voiceChat` mode enables the system's built-in
+    /// echo cancellation, so the assistant's TTS output isn't picked back up by
+    /// the mic. The `.audio` background mode (declared in Info.plist) + this
+    /// category keeps the session alive when the screen locks.
+    func configureAudioSession() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+        try session.setActive(true, options: [])
+    }
+
+    /// Lazily set up the AVAudioEngine once per speaking session.
+    private func startAudioEngine() throws {
+        if audioEngine == nil {
+            let engine = AVAudioEngine()
+            let node = AVAudioPlayerNode()
+            engine.attach(node)
+            engine.connect(node, to: engine.mainMixerNode, format: nil)
+            audioEngine = engine
+            playerNode = node
+        }
+        // Azure sends 16-bit PCM by default; build the format lazily on the
+        // first chunk so we match whatever sample rate arrives.
+        audioFormat = nil
+        // Use the shared playAndRecord/voiceChat session — required for the
+        // .audio background mode to keep the mic alive when locked, and for
+        // system echo cancellation between TTS output and STT input.
+        try configureAudioSession()
+        if !(audioEngine?.isRunning ?? false) {
+            try audioEngine?.start()
+        }
+        playerNode?.play()
+    }
+
+    /// Push a synthesized PCM chunk to the player. The first chunk establishes
+    /// the stream format (Azure default: 16kHz, 16-bit, mono).
+    private func feedAudio(_ data: Data) {
+        guard !data.isEmpty, let node = playerNode, let engine = audioEngine else { return }
+        if audioFormat == nil {
+            audioFormat = AVAudioFormat(
+                commonFormat: .pcmFormatInt16,
+                sampleRate: 16000,
+                channels: 1,
+                interleaved: true
+            )
+            if let fmt = audioFormat {
+                engine.connect(node, to: engine.mainMixerNode, format: fmt)
+            }
+        }
+        guard let fmt = audioFormat else { return }
+        let frameCount = AVAudioFrameCount(data.count) / fmt.streamDescription.pointee.mBytesPerFrame
+        guard frameCount > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: frameCount) else { return }
+        // Set frameLength first so mDataByteSize reflects the actual sample count.
+        buffer.frameLength = frameCount
+        // Copy the PCM bytes into the buffer's own storage — do NOT alias the
+        // Data's pointer (it may be freed before playback finishes).
+        let byteCount = min(data.count, Int(buffer.audioBufferList.pointee.mBuffers.mDataByteSize))
+        if let dst = buffer.audioBufferList.pointee.mBuffers.mData {
+            data.withUnsafeBytes { raw in
+                if let src = raw.baseAddress {
+                    memcpy(dst, src, byteCount)
+                }
+            }
+        }
+        node.scheduleBuffer(buffer, completionHandler: nil)
+    }
+}
+
+extension AzureSpeechManager: VoiceActivityDetectorDelegate {
+    func vadSpeechStarted() {
+        // Real mic energy just appeared — treat it like the old "first partial"
+        // signal so call mode can interrupt any TTS still playing.
+        onPartialSpeech?()
+    }
+
+    func vadSpeechEnded() {
+        // No-op for v1: Azure's Recognized event + the commit phrase drive turns.
+    }
+}

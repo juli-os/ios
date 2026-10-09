@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"md5 /Applications/Makro.app/Contents/Resources/bin/makro-serve 2>&1\\necho \\\"── current source hash ──\\\"\\ngo build -o /tmp/makro-new ./cmd/gui/ && md5 /tmp/makro-new\",\"description\":\"Compare...",
+  "error": "Exit code 1\nMD5 (/Applications/Makro.app/Contents/Resources/bin/makro-serve) = 2f54fd324db6c1eccc67aad2418d8bc4\n── current source hash ──\nstat /Users/naglezhang/Desktop/Code/fingersaver/ios/Makro/cmd/gui: directory not found",
+  "timestamp": "2026-06-09T14:13:20.116Z",
+  "retry_count": 1
+}
