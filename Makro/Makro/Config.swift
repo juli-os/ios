@@ -6,7 +6,7 @@ class Config: ObservableObject {
     static let shared = Config()
 
     /// Factory default server address — the fallback when nothing is stored or
-    /// the stored value can't form a URL. 宁可连不上，不崩（2026-09-20 P2）。
+    /// the stored value can't form a URL. Rather fail to connect than crash (2026-09-20 P2).
     static let defaultServerURL = "https://juli-server.example:7171"
 
     private enum Key {
@@ -23,7 +23,7 @@ class Config: ObservableObject {
     @Published var password: String
     @Published var azureRegion: String
     @Published var azureKey: String
-    /// Comma-separated结束语 the user says to submit a voice turn, e.g. "请发送".
+    /// Comma-separated submit phrases the user says to commit a voice turn, e.g. "send it".
     /// Matched at the trailing edge of a recognized segment in call mode.
     @Published var commitPhrases: String
     /// When true, call mode uses local VAD + a push-stream recognizer that only
@@ -59,9 +59,11 @@ class Config: ObservableObject {
     }
 
     func save() {
-        // serverURL 校验（2026-09-20 P2）：解析失败拒存并回退上次有效值——
-        // 坏值（含空格/非 ASCII）一旦落库，启动首屏渲染 URL 强解即崩，且只能
-        // 删 App 恢复；保存动作本身照常持久化其余字段。
+        // serverURL validation (2026-09-20 P2): on parse failure reject the
+        // save and fall back to the last valid value — once a bad value
+        // (spaces/non-ASCII) lands, the first screen's URL force-parse
+        // crashes at launch, and only deleting the app recovers; the save
+        // action itself still persists the other fields as usual.
         if let valid = httpURLString {
             serverURL = valid
             UserDefaults.standard.set(valid, forKey: Key.serverURL)
@@ -83,7 +85,7 @@ class Config: ObservableObject {
         UserDefaults.standard.set(vadThreshold, forKey: Key.vadThreshold)
     }
 
-    /// Normalized list of结束语句 parsed from `commitPhrases`. Whitespace trimmed,
+    /// Normalized list of submit phrases parsed from `commitPhrases`. Whitespace trimmed,
     /// empties dropped. Case-folding is left to the CommitPhraseDetector so callers
     /// always see the phrases as the user typed them.
     var commitPhraseList: [String] {
@@ -111,7 +113,7 @@ class Config: ObservableObject {
 
     var httpBaseURL: URL {
         guard let urlString = httpURLString, let url = URL(string: urlString) else {
-            // 回退默认地址：宁可连不上也不崩。
+            // Fall back to the default address: rather fail to connect than crash.
             return URL(string: Self.defaultServerURL) ?? URL(string: "http://127.0.0.1:7070")!
         }
         return url

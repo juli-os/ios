@@ -1,9 +1,11 @@
 import SwiftUI
 
-// 插话纠偏 sheet（Penpot 板 11 · makro-iphone）。
-// 对着跑偏的 agent 说话比打字自然——语音 + 可编辑转写；投递走一等
-// intervene 端点，全程留痕（干预史/活动时间线/审计事件/心跳续命）。
-// 错误就地显示，不落被 sheet 挡住的列表横幅。
+// Intervene-to-correct sheet (Penpot board 11 · makro-iphone).
+// Talking to a drifting agent beats typing — voice + an editable
+// transcript; delivery goes through the first-class intervene endpoint,
+// fully traced (intervention history / activity timeline / audit events /
+// heartbeat renewal). Errors show in place, not in the list banner hidden
+// behind the sheet.
 
 struct InterveneSheet: View {
     @ObservedObject var vm: LifecycleViewModel
@@ -127,7 +129,7 @@ struct InterveneSheet: View {
     }
 }
 
-// MARK: - 补料 sheet（amend：缺 input 的失败步，引擎预填候选值）
+// MARK: - Amend-inputs sheet (amend: failed steps missing input; the engine prefills candidate values)
 
 import SwiftUI
 

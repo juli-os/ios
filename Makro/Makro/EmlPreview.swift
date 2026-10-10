@@ -1,10 +1,13 @@
 import Foundation
 
-/// .eml 工件预览（2026-09-21 用户报：手机上打开邮件工件一堆奇怪的东西——
-/// MIME 原文落进 video/黑屏分支）。最小 MIME 解析：头展开 + RFC2047 B/Q +
-/// multipart 递归 + base64/QP 解码；**只解码 text/\* 部件**，附件只列名与
-/// 近似体积（邮件常挂数 MB base64，解不动也不该解）。渲染成 HTML 走现成
-/// HTMLPreviewView（WKWebView 本地串，与 html 工件同路）。
+/// .eml artifact preview (2026-09-21 user report: opening a mail artifact on
+/// the phone showed a pile of weirdness — the raw MIME fell into the
+/// video/black-screen branch). Minimal MIME parsing: header expansion +
+/// RFC2047 B/Q + multipart recursion + base64/QP decoding; **decode only
+/// text/* parts**; attachments list name and approximate size only (mail
+/// often carries multi-MB base64 — undecodable in practice, and it should
+/// not be decoded anyway). Rendered as HTML through the existing
+/// HTMLPreviewView (WKWebView local string, same route as html artifacts).
 enum EmlPreview {
 
     struct View {
@@ -19,7 +22,7 @@ enum EmlPreview {
         var rawSizeLabel: String
     }
 
-    // ---- 解码原语 ---------------------------------------------------------
+    // ---- Decoding primitives ----------------------------------------------
 
     private static func decoder(forCharset cs: String) -> String.Encoding {
         let name = cs.trimmingCharacters(in: .whitespaces)
@@ -61,7 +64,7 @@ enum EmlPreview {
         return out
     }
 
-    /// RFC 2047：=?charset?B/Q?text?=（大小写不敏感，可连续多段）。
+    /// RFC 2047: =?charset?B/Q?text?= (case-insensitive, may be several consecutive segments).
     static func decodeMimeWords(_ s: String) -> String {
         guard let regex = try? NSRegularExpression(pattern: "=\\?([^?]+)\\?([bBqQ])\\?([^?]*)\\?=") else { return s }
         let ns = s as NSString
@@ -84,7 +87,7 @@ enum EmlPreview {
         return out.trimmingCharacters(in: .whitespaces)
     }
 
-    // ---- 结构解析 ---------------------------------------------------------
+    // ---- Structure parsing ------------------------------------------------
 
     private struct Headers {
         private let pairs: [(name: String, value: String)]
@@ -185,7 +188,7 @@ enum EmlPreview {
         )
     }
 
-    // ---- 渲染：生成 HTML 串，走现成 HTMLPreviewView（WKWebView 本地加载）--
+    // ---- Rendering: build the HTML string, through the existing HTMLPreviewView (WKWebView local load) --
 
     static func renderHTML(_ raw: String) -> String {
         let v = parse(raw)
@@ -223,7 +226,7 @@ enum EmlPreview {
           iframe { width: 100%; min-height: 220px; border: 1px solid #ECEAE3; border-radius: 10px; }
         </style></head><body>
         <div>\(rows)</div>\(atts)\(body)
-        <p class='muted'>原始 eml 物证 · \(v.rawSizeLabel)</p>
+        <p class='muted'>raw eml evidence · \(v.rawSizeLabel)</p>
         </body></html>
         """
     }

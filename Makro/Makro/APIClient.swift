@@ -29,8 +29,9 @@ final class APIClient: NSObject {
         return try JSONDecoder().decode([Session].self, from: data)
     }
 
-    /// 技能目录（GET /api/skills）：家族/用途/分发健康 + skill_used 用量聚合
-    /// （2026-10-02 追溯一期——Agents 页第二层入口消费）。
+    /// Skills catalog (GET /api/skills): family/purpose/dispatch health +
+    /// skill_used usage aggregation (2026-10-02 retrospective phase 1 —
+    /// consumed by the Agents page's second-layer entry).
     func fetchSkills() async throws -> [SkillInfo] {
         let url = config.httpBaseURL.appendingPathComponent("api/skills")
         let request = authedRequest(url: url)
@@ -40,9 +41,10 @@ final class APIClient: NSObject {
         return try JSONDecoder().decode(Wrapper.self, from: data).skills
     }
 
-    /// Dashboard 聚合（GET /api/stats/dashboard，wf_e86d52c97b51）：token
-    /// 自然日 + workflow 按日/状态/总量。query 走 URLComponents（%3F 事故
-    /// wf_0c46ba361222 教训：appendingPathComponent 会转义问号）。
+    /// Dashboard aggregation (GET /api/stats/dashboard, wf_e86d52c97b51):
+    /// tokens by calendar day + workflows by day/status/total. The query goes
+    /// through URLComponents (the %3F incident wf_0c46ba361222 taught us:
+    /// appendingPathComponent escapes the question mark).
     func fetchDashboardStats(days: Int) async throws -> DashboardStats {
         var comps = URLComponents(url: config.httpBaseURL.appendingPathComponent("api/stats/dashboard"),
                                   resolvingAgainstBaseURL: false)!
@@ -53,8 +55,9 @@ final class APIClient: NSObject {
         return try JSONDecoder().decode(DashboardStats.self, from: data)
     }
 
-    /// 费用分析聚合（GET /api/lifecycle/cost-stats，wf_6a74fc4a23e4）：每单
-    /// API 等效成本 × 价位分桶分布。days=0 表示全部（默认 30 天）。
+    /// Cost analysis aggregation (GET /api/lifecycle/cost-stats,
+    /// wf_6a74fc4a23e4): per-job API-equivalent cost × tier bucket
+    /// distribution. days=0 means all time (default is 30 days).
     func fetchCostStats(days: Int) async throws -> CostStats {
         var comps = URLComponents(url: config.httpBaseURL.appendingPathComponent("api/lifecycle/cost-stats"),
                                   resolvingAgainstBaseURL: false)!
@@ -65,7 +68,7 @@ final class APIClient: NSObject {
         return try JSONDecoder().decode(CostStats.self, from: data)
     }
 
-    /// 模型分布（GET /api/usage/stats）：饼图数据（byModel）。
+    /// Model distribution (GET /api/usage/stats): pie chart data (byModel).
     func fetchUsageStats(hours: Int) async throws -> UsageByModel {
         var comps = URLComponents(url: config.httpBaseURL.appendingPathComponent("api/usage/stats"),
                                   resolvingAgainstBaseURL: false)!
@@ -82,8 +85,10 @@ final class APIClient: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         var body: [String: String] = ["name": name]
-        // 服务端读 `cwd`（app.ts POST /api/sessions）——曾错发 working_dir 导致
-        // 目录被静默丢弃、会话全建在引擎进程 cwd（2026-09-20 P2 契约对齐）。
+        // The server reads `cwd` (app.ts POST /api/sessions) — sending
+        // working_dir by mistake once caused the directory to be silently
+        // dropped and every session created in the engine process's cwd
+        // (2026-09-20 P2 contract alignment).
         if let dir = workingDir { body["cwd"] = dir }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (_, response) = try await urlSession.data(for: request)
@@ -99,14 +104,17 @@ final class APIClient: NSObject {
         try checkAuth(response)
     }
 
-    // ── 开单对话（chat intake）：clarify loop → 确认开单（startTask 正门）──
-    // 事件流不走这里——服务端把回合事件镜像进 /ws/chat（chatWSURL）。
+    // ── Intake chat: clarify loop → confirm intake (the startTask front
+    // door). The event stream does not go through here — the server mirrors
+    // turn events into /ws/chat (chatWSURL).
 
-    /// 发一轮消息给开单助手。`voice` 标记本轮来自语音转写（服务端换口语
-    /// 化提示词：短句、无 markdown——回复会被朗读）。
-    /// 超时单独放宽到 120s：LLM 多轮（查客户/在办单+回复）实测 30s+，
-    /// 全局 15s 快速失败策略会把回合腰斩（0929 TestFlight 首用实证）——
-    /// 其余 API 仍 15s。
+    /// Send one turn to the intake assistant. `voice` flags the turn as
+    /// coming from speech transcription (the server switches to a spoken-style
+    /// prompt: short sentences, no markdown — the reply will be read aloud).
+    /// The timeout is relaxed to 120s for this call alone: multi-round LLM
+    /// turns (look up customer / open jobs + reply) measured at 30s+; the
+    /// global 15s fail-fast policy would cut the turn in half (0929 TestFlight
+    /// first-use evidence) — every other API stays at 15s.
     func sendIntakeTurn(text: String, voice: Bool = false, attachments: [ChatAttachment] = []) async throws {
         let url = config.httpBaseURL.appendingPathComponent("api/chat/intake/turn")
         var request = authedRequest(url: url)
@@ -128,19 +136,20 @@ final class APIClient: NSObject {
         }
     }
 
-    /// 确认暂存中的计划 → 服务端 startTask 开单（响应经 /ws/chat 的
-    /// dispatched/system 事件回流，VM 不解析返回体）。
+    /// Confirm the staged plan → the server's startTask dispatches the job
+    /// (the response flows back via /ws/chat dispatched/system events; the VM
+    /// does not parse the return body).
     func confirmIntakePlan(autoApprove: Bool = false) async throws {
         let url = config.httpBaseURL.appendingPathComponent("api/chat/intake/confirm")
         var request = authedRequest(url: url)
         request.httpMethod = "POST"
-        // 本单免批（2026-10-07）：计划卡勾选随 confirm 进 meta（缺省 false 兼容旧调用）。
+        // Per-job auto-approve (2026-10-07): the plan-card checkbox rides into meta with confirm (default false for old callers).
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(["auto_approve": autoApprove])
         _ = try await urlSession.data(for: request)
     }
 
-    /// 单子级免批切换（2026-10-07）：on=true 立即触发一轮 sweep。
+    /// Per-workflow auto-approve toggle (2026-10-07): on=true immediately triggers a sweep round.
     func setAutoApprove(workflowId: String, on: Bool) async throws {
         let encoded = workflowId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? workflowId
         let url = config.httpBaseURL.appendingPathComponent("api/lifecycle/workflows/\(encoded)/auto-approve")
@@ -151,7 +160,7 @@ final class APIClient: NSObject {
         _ = try await urlSession.data(for: request)
     }
 
-    /// 取消暂存中的计划 → 回到讨论。
+    /// Cancel the staged plan → back to the discussion.
     func denyIntakePlan() async throws {
         let url = config.httpBaseURL.appendingPathComponent("api/chat/intake/deny")
         var request = authedRequest(url: url)
@@ -159,8 +168,10 @@ final class APIClient: NSObject {
         _ = try await urlSession.data(for: request)
     }
 
-    /// 重连恢复：拉 intake 状态（phase + 暂存计划卡）。transcript 是 UI
-    /// 态不回传——重开空线程可接受（对话不进账）。
+    /// Reconnect recovery: pull the intake state (phase + the staged plan
+    /// card). The transcript is UI state and is not returned — reopening an
+    /// empty thread is acceptable (the conversation does not enter the
+    /// ledger).
     func fetchIntakeState() async throws -> IntakeState {
         let url = config.httpBaseURL.appendingPathComponent("api/chat/intake/state")
         var request = authedRequest(url: url)
@@ -216,8 +227,10 @@ final class APIClient: NSObject {
 
     /// Shares an artifact: backend mints a 1h HMAC-signed link for the ledger
     /// artifact (`POST /api/artifact/share` JSON `{id}` → `{url, expires_in_sec}`;
-    /// app.ts 为唯一实现，iOS 以服务端契约为准对齐，2026-09-20 P2）。
-    /// `id` 来自 /api/artifacts 行的账本 id（legacy 中心库文件无 id，不可分享）。
+    /// app.ts is the only implementation; iOS aligns with the server
+    /// contract, 2026-09-20 P2). The `id` comes from the ledger id on
+    /// /api/artifacts rows (legacy hub files have no id and cannot be
+    /// shared).
     func shareArtifact(id: String) async throws -> ShareResult {
         let url = config.httpBaseURL.appendingPathComponent("api/artifact/share")
         var request = authedRequest(url: url)
@@ -240,7 +253,7 @@ final class APIClient: NSObject {
     }
 
     /// Auth check that carries the server's error body through — 4xx/5xx
-    /// responses here carry actionable reasons ("驳回必须写明修改意见"…).
+    /// responses here carry actionable reasons ("a rejection must state what to change"…).
     /// New/edited call sites should prefer this over bare checkAuth.
     func checkAuthData(_ response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else { return }
@@ -275,7 +288,7 @@ extension APIClient: URLSessionDelegate {
     }
 }
 
-/// GET /api/chat/intake/state 的响应：重连恢复用（transcript 是 UI 态不回传）。
+/// GET /api/chat/intake/state response: used for reconnect recovery (the transcript is UI state and is not returned).
 struct IntakeState: Codable {
     let phase: String
     let plan: PendingPlan?
@@ -298,7 +311,7 @@ enum APIClientError: LocalizedError {
     }
 }
 
-// MARK: - Chat history 回拉（wf_e2f2bfba8865 P0：挂起期错过的帧补显）
+// MARK: - Chat history pull (wf_e2f2bfba8865 P0: backfilling frames missed during suspension)
 
 struct ChatEventFrame: Decodable {
     let type: String
@@ -321,10 +334,10 @@ extension APIClient {
     }
 }
 
-// MARK: - Chat 附件上传 + turn 携带（wf_3310501a9fe4，2026-10-05）
+// MARK: - Chat attachment upload + turn carry (wf_3310501a9fe4, 2026-10-05)
 
 extension APIClient {
-    /// multipart 上传单件附件 → 服务端回填 {id,name,mime,bytes,path}。
+    /// Upload one attachment as multipart → the server fills in {id,name,mime,bytes,path}.
     func uploadChatAttachment(data: Data, name: String, mime: String) async throws -> ChatAttachment {
         let url = config.httpBaseURL.appendingPathComponent("api/chat/attachment")
         var request = authedRequest(url: url)

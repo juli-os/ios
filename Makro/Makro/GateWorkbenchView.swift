@@ -1,10 +1,12 @@
 import SwiftUI
 
-// 闸门工作台（Penpot 板 03 · makro-iphone）——全屏决策面。
-// 收件箱卡片是"瞄一眼"，这里是"看全再签"：前置检查、将发送的正文全文、
-// 随信附件、备注，全部铺开；决策区吸底常驻三键（驳回/对齐/批准），
-// 不用滚去找按钮。板规格：驳回 #E8C7C2 描边 / 对齐 #EAD9B0 描边 /
-// 批准 #D97C26 填充，圆角 10，高 40。
+// Gate workbench (Penpot board 03 · makro-iphone) — the full-screen decision
+// surface. The inbox card is "glance"; this is "see it all before signing":
+// preflight checks, the full body about to be sent, the attachments going
+// along, the note — all laid out; a bottom-docked decision area keeps three
+// buttons permanently in reach (reject / align / approve), no scrolling to
+// find them. Board spec: reject #E8C7C2 stroke / align #EAD9B0 stroke /
+// approve #D97C26 fill, corner radius 10, height 40.
 
 struct GateWorkbenchView: View {
     let item: GateQueueItem
@@ -82,7 +84,7 @@ struct GateWorkbenchView: View {
         .task { await loadTree() }
     }
 
-    // 状态行：点 + 案卷标题 + 轮次
+    // Status row: dot + case title + round
     private var headerLine: some View {
         HStack(spacing: 8) {
             Image(systemName: "circle.fill").font(.system(size: 8))
@@ -100,7 +102,7 @@ struct GateWorkbenchView: View {
         return ""
     }
 
-    // 前置检查卡
+    // Preflight checks card
     private var checksCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(checks.isEmpty ? "Pre-send checks · none" : "Pre-send checks · \(checks.filter(\.failed).isEmpty ? "\(checks.count)/\(checks.count) pass" : " — failing")")
@@ -130,7 +132,7 @@ struct GateWorkbenchView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    // 将发送的正文（内联全文优先，契约/fallback 兜底）
+    // The body about to be sent (inline full text first, contract/fallback as backstop)
     private var bodyCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Body to be sent").font(DS.text(13, .bold))
@@ -161,7 +163,7 @@ struct GateWorkbenchView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    // 随信附件
+    // Attachments going along
     private var attachmentsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Attachments (\(item.step.deliverableItems.count))")
@@ -198,7 +200,7 @@ struct GateWorkbenchView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    // 吸底决策三键（板 03 规格）
+    // Bottom-docked decision trio (board 03 spec)
     private var decisionBar: some View {
         HStack(spacing: 12) {
             Button {

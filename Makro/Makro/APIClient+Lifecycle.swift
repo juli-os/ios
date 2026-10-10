@@ -43,7 +43,7 @@ extension APIClient {
     }
 
     /// action: approve | deny | retry
-    /// 驳回回修:feedback 注入前一步重做,轮次+1,流程不断。
+    /// Reject & rework: the feedback is injected and the previous step re-runs; round +1, the flow is not cut.
     func reworkStep(stepID: String, feedback: String) async throws {
         let encoded = stepID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? stepID
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/steps/\(encoded)/rework")
@@ -55,9 +55,10 @@ extension APIClient {
         try checkAuthData(response, data: data)
     }
 
-    /// 一等插话：向在途 agent/verify 步递补充指示——投递+留痕一体
-    /// （step 干预史、output.activity、step_intervened 事件）。区别于
-    /// /api/sessions/:name/send 的裸 tmux send-keys。
+    /// First-class intervene: supplementary instructions delivered to an
+    /// in-flight agent/verify step — delivery + record in one (step
+    /// intervention history, output.activity, step_intervened events).
+    /// Distinct from the bare tmux send-keys of /api/sessions/:name/send.
     func interveneStep(stepID: String, text: String) async throws {
         let encoded = stepID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? stepID
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/steps/\(encoded)/intervene")
@@ -69,7 +70,7 @@ extension APIClient {
         try checkAuthData(response, data: data)
     }
 
-    /// 对齐修正:人定稿的最高优先修正,以 amendment artifact 入档,流程继续。
+    /// Course amendment: the highest-priority correction in the human's final wording, filed as an amendment artifact; the flow continues.
     func alignStep(stepID: String, amendment: String) async throws {
         let encoded = stepID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? stepID
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/steps/\(encoded)/align")
@@ -81,9 +82,11 @@ extension APIClient {
         try checkAuthData(response, data: data)
     }
 
-    /// 免模板发单（与 web #/trigger 同一契约）：startTask 发单即接手，
-    /// 首节点自动播种；返回 {workflow:{id,...}}（裸 camelCase，只取 id）。
-    /// relatesTo：跟进单挂靠（input.relates_to → 因果链入账）。
+    /// Template-free intake (same contract as the web #/trigger):
+    /// startTask dispatches and takes over, the first node auto-seeded;
+    /// returns {workflow:{id,...}} (bare camelCase, we take only the id).
+    /// relatesTo: follow-up attachment (input.relates_to → enters the causal
+    /// chain on the ledger).
     func startTask(title: String, brief: String, relatesTo: String? = nil) async throws -> String {
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/tasks")
         var request = authedRequest(url: url)
@@ -101,11 +104,11 @@ extension APIClient {
         return try JSONDecoder().decode(Wrap.self, from: data).workflow.id
     }
 
-    // MARK: - 案卷级动作（web lifecycle.ts 对齐）
+    // MARK: - Case-level actions (aligned with the web lifecycle.ts)
 
 
 
-    /// 办结：nodes 模式跑完动作后显式结算（running 且无在飞步）。
+    /// Settle: explicit settlement after nodes-mode actions finish (running with no in-flight steps).
     func settleWorkflow(_ id: String) async throws {
         let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/workflows/\(encoded)/settle")
@@ -117,7 +120,7 @@ extension APIClient {
         try checkAuthData(response, data: data)
     }
 
-    /// 失败收口：failed 案卷正式关闭（区别于 running 的 force-close）。
+    /// Failed close-out: formally closes a failed case (distinct from force-close for running ones).
     func closeWorkflow(_ id: String, note: String) async throws {
         let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/workflows/\(encoded)/close")
@@ -129,7 +132,7 @@ extension APIClient {
         try checkAuthData(response, data: data)
     }
 
-    /// 定时发送：批准发送闸门并指定 send_at（ISO8601）。
+    /// Scheduled send: approves the send gate with a send_at (ISO8601).
     func approveScheduled(stepID: String, sendAt: Date, note: String) async throws {
         let encoded = stepID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? stepID
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/steps/\(encoded)/approve")
@@ -143,7 +146,7 @@ extension APIClient {
         try checkAuthData(response, data: data)
     }
 
-    /// 单步取消（不牵连整单）：仅 pending / waiting_human 步合法。
+    /// Cancel one step (the whole job unaffected): only pending / waiting_human steps are legal.
     func cancelStep(stepID: String, note: String) async throws {
         let encoded = stepID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? stepID
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/steps/\(encoded)/cancel")
@@ -155,7 +158,7 @@ extension APIClient {
         try checkAuthData(response, data: data)
     }
 
-    /// 补正重发：send 守卫拒发后，agent 补正再过闸重发。
+    /// Amend & resend: after the send guard refuses, the agent amends and re-enters the gate to resend.
     func reworkSend(stepID: String, feedback: String) async throws {
         let encoded = stepID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? stepID
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/steps/\(encoded)/rework-send")
@@ -167,7 +170,7 @@ extension APIClient {
         try checkAuthData(response, data: data)
     }
 
-    /// 重试并改指令：retry 携 plan 覆写（agent/verify 失败步）。
+    /// Retry with new instructions: retry carrying a plan override (failed agent/verify steps).
     func retryWithPatch(stepID: String, plan: String) async throws {
         let encoded = stepID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? stepID
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/steps/\(encoded)/retry")
@@ -181,7 +184,7 @@ extension APIClient {
         try checkAuthData(response, data: data)
     }
 
-    /// 补料候选：GET 返回顶层 Record<key,{value,source}>（与 web 同形状）。
+    /// Amend-input candidates: the GET returns a top-level Record<key,{value,source}> (same shape as the web).
     func fetchAmendSuggestions(workflowID: String) async throws -> [AmendSuggestion] {
         let encoded = workflowID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? workflowID
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/workflows/\(encoded)/amend-suggestions")
@@ -197,7 +200,7 @@ extension APIClient {
         }.sorted { $0.key < $1.key }
     }
 
-    /// 补料：patch 合并进步 input 后自动重跑。
+    /// Amend inputs: the patch merges into the step input, then it auto-reruns.
     func amendStep(stepID: String, patch: [String: String]) async throws {
         let encoded = stepID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? stepID
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/steps/\(encoded)/amend")
@@ -209,7 +212,7 @@ extension APIClient {
         try checkAuthData(response, data: data)
     }
 
-    /// 强制关闭 running 流水（终局逃生舱）：在途步全部 cancelled，流水终局。
+    /// Force-close a running pipeline (terminal escape hatch): all in-flight steps cancelled, the pipeline ends.
     func forceCloseWorkflow(_ id: String, note: String) async throws {
         let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/workflows/\(encoded)/force-close")
@@ -303,9 +306,11 @@ extension APIClient {
         return try JSONDecoder().decode(Wrap.self, from: data).profiles
     }
 
-    // ── Agent Mesh（板E）：一张活图的移动投影 ──────────────────────────────
-    // nodes=声明展开（company/domain/绑定 senders），recent=账本 route_decision
-    // 回放。视图零自有状态：维度切换=同一份数据重排，另一维变成节点标签。
+    // ── Agent Mesh (board E): the mobile projection of a living graph ──────
+    // nodes = declaration expansion (company/domain/bound senders), recent =
+    // ledger route_decision replay. The view owns zero state of its own:
+    // switching dimensions is a re-sort of the same data; the other dimension
+    // becomes node labels.
 
     struct MeshNode: Codable, Identifiable, Equatable {
         let name: String
@@ -342,11 +347,13 @@ extension APIClient {
         struct MeshDomain: Equatable { let company: String; let name: String }
     }
 
-    /// 路由事件回放（/api/lifecycle/events 账本行的路由子集）——路由 DAG 的边料。
+    /// Routing event replay (the routing subset of /api/lifecycle/events ledger rows) — edge material for the routing DAG.
     func fetchRouteEvents(limit: Int = 1000) async throws -> [RouteEvent] {
-        // query 必须走 URLComponents——appendingPathComponent 会把 "?" 转义成
-        // %3F（实发 /events%3Flimit=1000 → 404 → 前端误报 Server error，
-        // 2026-10-01 neo 报障 wf_0c46ba361222 实证，引擎日志 [http-warn] 留痕）。
+        // The query must go through URLComponents — appendingPathComponent
+        // escapes "?" into %3F (actually sent /events%3Flimit=1000 → 404 →
+        // the front end falsely reported Server error; confirmed by the
+        // 2026-10-01 neo report wf_0c46ba361222, with the engine log's
+        // [http-warn] trace).
         var comps = URLComponents(url: Config.shared.httpBaseURL.appendingPathComponent("api/lifecycle/events"),
                                   resolvingAgainstBaseURL: false)!
         comps.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
@@ -402,7 +409,7 @@ extension APIClient {
     }
 }
 
-/// 补料候选行（amend-suggestions）。
+/// Amend-input candidate row (amend-suggestions).
 struct AmendSuggestion: Identifiable, Equatable {
     let key: String
     let value: String

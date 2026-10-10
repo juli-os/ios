@@ -11,7 +11,7 @@
     <key>signingStyle</key>
     <string>automatic</string>
     <key>uploadSymbols</key>
-    <!-- symbols off: Azure Speech pod 无 dSYM，上传符号会整单失败 -->
+    <!-- symbols off: the Azure Speech pod has no dSYM; uploading symbols would fail the whole upload -->
     <false/>
     <key>manageAppVersionAndBuildNumber</key>
     <false/>

@@ -156,7 +156,7 @@ final class VoiceActivityDetector {
 
 // MARK: - Commit-phrase detection
 
-/// Decides, per Azure `Recognized` segment, whether the user said a结束语
+/// Decides, per Azure `Recognized` segment, whether the user said a submit phrase
 /// (commit phrase) that should submit the voice turn.
 ///
 /// A phrase matches only at the TRAILING edge of a segment (case-insensitive,
@@ -197,8 +197,8 @@ final class CommitPhraseDetector {
             guard !phrase.isEmpty, lower.hasSuffix(phrase) else { continue }
             // Boundary guard: the phrase must be preceded by a word boundary
             // (start of string, whitespace, or punctuation). Without this a
-            // single-character phrase like "好" would falsely match the tail of
-            // "...很好" / "你好" and commit a half-thought.
+            // single-character phrase like "好" ("ok") would falsely match the
+            // tail of "...很好" / "你好" and commit a half-thought.
             let prefix = String(lower.dropLast(phrase.count))
             let boundaryOK = prefix.isEmpty || Self.isBoundary(prefix.last!)
             guard boundaryOK else { continue }

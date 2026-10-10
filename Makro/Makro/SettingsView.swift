@@ -19,7 +19,7 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                // 分组（板 12 · 设置与通知）：连接 / 语音 / 通知
+                // Groups (board 12 · settings & notifications): connection / voice / notifications
                 groupLabel("Connection")
                 serverCard
                 authCard
@@ -41,8 +41,10 @@ struct SettingsView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Save") {
-                    // serverURL 校验（2026-09-20 P2）：解析失败拒存并提示——
-                    // 坏地址落 UserDefaults 后启动即崩，只能删 App 恢复。
+                    // serverURL validation (2026-09-20 P2): reject the save
+                    // with a notice on parse failure — a bad address landing
+                    // in UserDefaults crashes at launch, and only deleting
+                    // the app recovers.
                     guard config.isServerURLValid else {
                         showInvalidURL = true
                         return
@@ -63,7 +65,7 @@ struct SettingsView: View {
         .onAppear { quotaTracker.reload() }
     }
 
-    // MARK: - Group label（板 12 分组头：橘色 mono 大写）
+    // MARK: - Group label (board 12 group headers: orange mono uppercase)
 
     private func groupLabel(_ text: String) -> some View {
         Text(text)
@@ -72,7 +74,7 @@ struct SettingsView: View {
             .padding(.leading, 2)
     }
 
-    // MARK: - Notifications（板 12：推送段）
+    // MARK: - Notifications (board 12: push section)
 
     private var notifyCard: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -423,8 +425,9 @@ struct SettingsView: View {
     // MARK: - Info
 
     private var infoCard: some View {
-        // 版本行（板 12）：「Makro 1.1 (2) · juli-service」——版本号取 Bundle，
-        // 服务器提示并入一行（原英文占位文案按设计替换）。
+        // Version row (board 12): "Makro 1.1 (2) · juli-service" — the version
+        // comes from the Bundle, and the server hint shares the line (the old
+        // English placeholder copy was replaced per design).
         HStack(spacing: 6) {
             Text("Makro \(appVersion) (\(buildNumber)) · juli-service")
             Text("· server must be reachable")

@@ -11,10 +11,10 @@
     <key>signingStyle</key>
     <string>automatic</string>
     <key>uploadSymbols</key>
-    <!-- symbols off: Azure Speech pod 无 dSYM，上传符号会整单失败 -->
+    <!-- symbols off: the Azure Speech pod has no dSYM; uploading symbols would fail the whole upload -->
     <false/>
     <key>manageAppVersionAndBuildNumber</key>
-    <!-- build 号由 xcodebuild 导出/上传时自动分配，第二次起不再撞 ASC「build number already used」 -->
+    <!-- the build number is auto-assigned by xcodebuild at export/upload; from the second upload on, no more ASC "build number already used" collisions -->
     <true/>
 </dict>
 </plist>

@@ -20,9 +20,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
-    /// App 前台化 = 用户正在看，通知中心的旧横幅不再是提醒面——全部清掉
-    /// （含角标归零）。否则完结案卷的旧通知永远挂在那里：点进去没有对应
-    /// 内容，也没有任何机制让它消失。
+    /// App foregrounded = the user is looking at it; the old banners in
+    /// Notification Center are no longer the reminder surface — clear them
+    /// all (badge to zero too). Otherwise the old notification for a
+    /// finished case hangs there forever: tapping in shows no matching
+    /// content, and nothing ever makes it go away.
     func applicationDidBecomeActive(_ application: UIApplication) {
         application.applicationIconBadgeNumber = 0
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
@@ -72,9 +74,11 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                     stepID: info["step_id"] as? String ?? ""
                 )
             }
-            // 注记（2026-09-20 审查）：服务端 apnsAlertPayload 从不携带 `session`
-            // 键——「会话推送直达终端」原是死分支，已删。若将来服务端补发
-            // session 键，在这里恢复 DeepLinkRouter.shared.session 路由即可。
+            // Note (2026-09-20 review): the server's apnsAlertPayload never
+            // carries a `session` key — "push-to-terminal for a session" was
+            // a dead branch and was removed. If the server ever starts
+            // sending the session key, restore the DeepLinkRouter.shared.session
+            // routing here.
         }
         completionHandler()
     }

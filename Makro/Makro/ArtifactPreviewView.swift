@@ -12,12 +12,14 @@ import CoreImage.CIFilterBuiltins
 struct ArtifactPreviewView: View {
     let artifact: Artifact
 
-    /// 板 13 全局状态「大附件 50MB 闸」的阈值。
+    /// Threshold of the board-13 global "large attachment 50MB gate".
     static let sizeGateBytes: Int64 = 50 * 1024 * 1024
 
     @State private var loadState: LoadState = .loading
-    // 所属单横幅与回跳（wf_1bc08ecd4184，方案 A v2：标题全文不截断、wfId
-    // 不进展示层——只用于跳转）。legacy makro 工件无 workflow 键，不显横幅。
+    // Owning-job banner and jump-back (wf_1bc08ecd4184, option A v2: the
+    // title shows in full without truncation; the wfId stays out of the
+    // display layer — used for navigation only). Legacy makro artifacts have
+    // no workflow key; no banner is shown.
     @StateObject private var caseVM = LifecycleViewModel()
     @State private var showCase = false
     @State private var sharing = false
@@ -128,8 +130,10 @@ struct ArtifactPreviewView: View {
     }
 
     private func loadContent() async {
-        // 大附件闸（板 09+13）：>50MB 不做手机端无谓下载——预览面直接给
-        // 「文件过大（XMB）——建议在桌面端查看」，流量与等待都省在入口。
+        // Large-attachment gate (boards 09+13): no pointless multi-MB download
+        // on the phone — the preview surface says "file too large (XMB) —
+        // best viewed on desktop" right away, saving both traffic and waiting
+        // at the entry point.
         if artifact.size > Self.sizeGateBytes {
             let mb = Double(artifact.size) / 1024 / 1024
             await MainActor.run {
@@ -140,20 +144,25 @@ struct ArtifactPreviewView: View {
         do {
             let data = try await APIClient.shared.fetchArtifactContent(session: artifact.session, path: artifact.path)
             if artifact.name.lowercased().hasSuffix(".eml") {
-                // 邮件物证（2026-09-21 用户报：打开 eml 一堆奇怪的东西）——MIME
-                // 原文此前落 video 分支；解析出头卡+可读正文走 HTML 预览。
+                // Email evidence (2026-09-21 user report: opening an eml
+                // showed a pile of weirdness) — the raw MIME used to fall
+                // into the video branch; when a header card + readable body
+                // parse out, go through the HTML preview.
                 let raw = String(data: data, encoding: .utf8) ?? ""
                 let html = EmlPreview.renderHTML(raw)
                 await MainActor.run { loadState = .htmlString(html) }
                 return
             }
-            // 多格式富文本查看（wf_b93d083f6682，2026-10-05）：此前 md/json/
-            // 图片/pdf/office 全部掉进视频分支（AVPlayer 播不了=黑屏），
-            // PDF/QuickLook 组件一直未接线。这里按谓词派发到各自富视图。
-            // R1 P1-1：后缀谓词必须整体排在 isHTML 之前——服务端
-            // artifactEntryType 对非视频一律返回 "html"（artifacts.ts:29-32），
-            // isHTML 排最前会把 md/json/txt/图片/pdf/office 全吞进裸 HTML
-            // 分支，后段派发成死代码。
+            // Multi-format rich-text viewing (wf_b93d083f6682, 2026-10-05):
+            // previously md/json/images/pdf/office all fell into the video
+            // branch (AVPlayer cannot play them = black screen), and the
+            // PDF/QuickLook components were never wired up. Here predicates
+            // dispatch to each rich view.
+            // R1 P1-1: the extension predicates must sit entirely before
+            // isHTML — the server's artifactEntryType returns "html" for
+            // anything non-video (artifacts.ts:29-32); putting isHTML first
+            // would swallow md/json/txt/images/pdf/office into the bare HTML
+            // branch, leaving the later dispatch as dead code.
             if artifact.isMarkdown {
                 let md = String(data: data, encoding: .utf8) ?? ""
                 await MainActor.run { loadState = .htmlString(MarkdownRenderer.render(md, title: artifact.name)) }
@@ -174,7 +183,7 @@ struct ArtifactPreviewView: View {
                 return
             }
             if artifact.isPDF || artifact.isOffice {
-                // PDFKit / QuickLook 都要本地文件 URL——写临时件（同视频分支路线）。
+                // PDFKit / QuickLook both need a local file URL — write a temp file (same route as the video branch).
                 let tmp = FileManager.default.temporaryDirectory
                     .appendingPathComponent(artifact.name)
                 try data.write(to: tmp)
@@ -187,14 +196,15 @@ struct ArtifactPreviewView: View {
                 }
                 return
             }
-            // 裸 HTML 工件（.html/.htm，type=="html"）：既有渲染路径不变——
-            // 能走到这里说明没有任何富格式后缀命中（R1 P1-1）。
+            // Bare HTML artifacts (.html/.htm, type=="html"): the existing
+            // rendering path unchanged — reaching here means no rich-format
+            // extension matched (R1 P1-1).
             if artifact.isHTML {
                 let html = String(data: data, encoding: .utf8) ?? ""
                 await MainActor.run { loadState = .htmlString(html) }
                 return
             }
-            // 视频（原有行为）：AVPlayer needs a file URL, not raw Data.
+            // Video (existing behavior): AVPlayer needs a file URL, not raw Data.
             let tmp = FileManager.default.temporaryDirectory
                 .appendingPathComponent(artifact.name)
             try data.write(to: tmp)
@@ -341,9 +351,11 @@ func presentShareSheet(items: [Any]) {
 struct HTMLPreviewView: UIViewRepresentable {
     let html: String
 
-    /// 视口适配（wf_8cfa4772fc03）：外部工件 HTML 无 viewport meta 时按 980px
-    /// 桌面宽渲染——手机只见左缘竖条=无法查看。统一注入/替换 device-width 视口；
-    /// 不加 user-scalable=no，保留捏合缩放（archify 宽画布工件仍可放大细看）。
+    /// Viewport adaptation (wf_8cfa4772fc03): external artifact HTML without
+    /// a viewport meta renders at the 980px desktop width — the phone sees
+    /// only a left-edge sliver = unviewable. Inject/replace a device-width
+    /// viewport uniformly; no user-scalable=no, so pinch zoom stays (wide
+    /// archify canvas artifacts can still be zoomed in for detail).
     static func mobileHTML(_ html: String) -> String {
         let meta = #"<meta name="viewport" content="width=device-width, initial-scale=1">"#
         if let r = html.range(of: #"<meta[^>]*viewport[^>]*>"#, options: .regularExpression) {
@@ -412,9 +424,10 @@ struct VideoPreviewView: View {
     }
 }
 
-// MARK: - PDF preview（PDFKit：翻页/缩放/缩略图/搜索原生自带，零依赖）
-// 喂本地文件 URL——与 HTML/视频同一套"鉴权下载→临时文件→本地渲染"管线，
-// 远程 URL 会撞自签 TLS 钉扎。
+// MARK: - PDF preview (PDFKit: paging/zoom/thumbnails/search come native, zero dependencies)
+// Fed a local file URL — the same authenticated-download → temp-file →
+// local-render pipeline as HTML/video; a remote URL would hit the
+// self-signed TLS pinning.
 
 import PDFKit
 
@@ -433,8 +446,9 @@ struct PDFPreviewView: UIViewRepresentable {
     func updateUIView(_ uiView: PDFView, context: Context) {}
 }
 
-// MARK: - QuickLook（docx/xlsx/pptx 等办公格式的系统级只读预览器）
-// iOS 文档浏览的最佳实践——Dropbox/Slack 同款路线，无第三方依赖。
+// MARK: - QuickLook (the system-level read-only previewer for docx/xlsx/pptx and other office formats)
+// Best practice for iOS document viewing — the same route as
+// Dropbox/Slack, no third-party dependencies.
 
 import QuickLook
 
@@ -463,8 +477,9 @@ struct QuickLookPreview: UIViewControllerRepresentable {
     }
 }
 
-// MARK: - Image preview（wf_b93d083f6682：图片此前掉视频分支黑屏）
-// 适应屏幕 + 捏合缩放 + 双击复位；大图自动 fit，小图原尺寸居中。
+// MARK: - Image preview (wf_b93d083f6682: images previously fell into the video branch, black screen)
+// Fit-to-screen + pinch zoom + double-tap reset; large images auto-fit,
+// small ones shown centered at native size.
 
 struct ImagePreviewView: View {
     let data: Data
@@ -504,8 +519,9 @@ struct ImagePreviewView: View {
     }
 }
 
-// MARK: - 文本类富阅读壳（wf_b93d083f6682，2026-10-05）
-// 三个渲染器共用同一套 juli 基调 CSS 壳；正文经 JSON 编码注入，杜绝注入。
+// MARK: - Text-family rich reading shell (wf_b93d083f6682, 2026-10-05)
+// Three renderers share the same juli-toned CSS shell; the body is injected
+// JSON-encoded, eliminating injection.
 
 enum RichShell {
     static func page(title: String, bodyHTML: String) -> String {
@@ -548,9 +564,11 @@ enum RichShell {
         """
     }
 
-    /// Swift 侧安全注入：正文整体作为一个文本节点放进 <script>，由各渲染器
-    /// 自己的脚本在定义完渲染函数后读取落位（mk-out）——避免把正文拼进 HTML
-    /// 结构造成标签注入/XSS。（R1 P1-2：原 place 参数从未被插值，删。）
+    /// Swift-side safe injection: the body goes in as a single text node
+    /// inside <script>, read and placed by each renderer's own script after
+    /// it defines its render function (mk-out) — avoids splicing the body
+    /// into the HTML structure and causing tag injection/XSS. (R1 P1-2: the
+    /// old place parameter was never interpolated; removed.)
     static func safeBodySlot(payloadJSON: String) -> String {
         """
         <script id="mk-payload" type="application/json">\(payloadJSON)</script>
@@ -559,7 +577,7 @@ enum RichShell {
     }
 }
 
-// MARK: - Markdown 渲染器（自写轻量 md→HTML，~零依赖）
+// MARK: - Markdown renderer (hand-written lightweight md→HTML, ~zero dependencies)
 
 enum MarkdownRenderer {
     static func render(_ md: String, title: String) -> String {
@@ -618,7 +636,7 @@ enum MarkdownRenderer {
           }
           return out.join("\\n");
         };
-        // R1 P1-2：落实填充——此前只定义 __md 从不调用，md 预览恒显「…」占位。
+        // R1 P1-2: the fill-in landed — previously __md was only defined, never called, so md previews were stuck on the "…" placeholder.
         const P = JSON.parse(document.getElementById("mk-payload").textContent);
         document.getElementById("mk-out").innerHTML = window.__md(P.text);
         </script>
@@ -631,7 +649,7 @@ enum MarkdownRenderer {
     }
 }
 
-// MARK: - JSON 格式化视图（递归折叠树 + 类型着色 + 统计；失败回退原文）
+// MARK: - JSON formatted view (recursive collapsible tree + type coloring + stats; falls back to raw text on failure)
 
 enum JSONFormatterView {
     static func render(_ raw: String, title: String) -> String {
@@ -654,7 +672,7 @@ enum JSONFormatterView {
         <script>
         window.__jf = function(text){
           let v; try { v = JSON.parse(text); } catch (e) {
-            return '<div class="jf-err">⚠️ JSON 解析失败（'+esc(e.message)+'），原文如下：\\n\\n'+esc(text)+'</div>';
+            return '<div class="jf-err">⚠️ JSON parse failed ('+esc(e.message)+'), raw text follows:\\n\\n'+esc(text)+'</div>';
           }
           const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
           let counts = {obj:0,arr:0,str:0,num:0,bool:0,nul:0};
@@ -680,9 +698,9 @@ enum JSONFormatterView {
             counts.nul++; return '<div class="jf-row">'+head+'<span class="jf-nul">null</span></div>';
           };
           const tree = node(null, v, 0);
-          return '<p class="jf-meta">📦 对象 '+counts.obj+' · 数组 '+counts.arr+' · 字符串 '+counts.str
-            + ' · 数字 '+counts.num+' · 布尔 '+counts.bool+' · null '+counts.nul
-            + '　（▾ 可折叠）</p><div class="jf-root">'+tree+'</div>';
+          return '<p class="jf-meta">📦 objects '+counts.obj+' · arrays '+counts.arr+' · strings '+counts.str
+            + ' · numbers '+counts.num+' · booleans '+counts.bool+' · null '+counts.nul
+            + ' (▾ collapsible)</p><div class="jf-root">'+tree+'</div>';
         };
         const __P = JSON.parse(document.getElementById("mk-payload").textContent);
         document.getElementById("mk-out").innerHTML = window.__jf(__P.text);
@@ -691,7 +709,7 @@ enum JSONFormatterView {
     }
 }
 
-// MARK: - 富文本壳（txt/log/csv 等：等宽阅读，告别裸文件）
+// MARK: - Rich-text shell (txt/log/csv etc.: monospaced reading, no more bare files)
 
 enum RichTextShell {
     static func render(_ raw: String, title: String) -> String {
@@ -711,7 +729,7 @@ enum RichTextShell {
 }
 
 extension MarkdownRenderer {
-    /// JSON 字符串安全编码（单字符串打包后去括号，供 safeBodySlot 注入）。
+    /// Safe-encode a JSON string (wrap as a single string then strip the brackets, for safeBodySlot injection).
     static func jsonStringExport(_ s: String) -> String {
         jsonString(s)
     }

@@ -1,15 +1,18 @@
 import SwiftUI
 
-// 发单 · 语音优先（Penpot 板 10 · makro-iphone）。
-// 手打成本太高——语音是一等输入：大 mic 点按开始/结束，Azure 转写
-// （工程内既有 AzureSpeechManager，设置里已配），转写结果可编辑，
-// 手打永远可用。标题自动取首句。发起 = POST /api/lifecycle/tasks
-// （与 web #/trigger 同契约，发单即接手），成功后自动打开新案卷详情。
+// Intake · voice-first (Penpot board 10 · makro-iphone).
+// Typing is too costly — voice is the first-class input: a big mic,
+// tap-to-start/stop, Azure transcription (the project's existing
+// AzureSpeechManager, already configured in Settings), editable transcript,
+// and typing always available. The title auto-takes the first sentence.
+// Submit = POST /api/lifecycle/tasks (same contract as the web #/trigger;
+// dispatch takes over immediately); on success the new case detail opens
+// automatically.
 
 struct TaskComposerView: View {
-    /// 发起成功 → 回传新案卷 id，调用方打开详情。
+    /// Submit succeeded → hand the new case id back; the caller opens the detail.
     let onStarted: (String) -> Void
-    /// 跟进单挂靠：指向既有案卷（因果链入账）。
+    /// Follow-up attachment: points at an existing case (enters the causal chain on the ledger).
     var relatesTo: String? = nil
     @Environment(\.dismiss) private var dismiss
 
@@ -43,7 +46,7 @@ struct TaskComposerView: View {
                             .background(DS.Ink.mint.opacity(0.1))
                             .clipShape(Capsule())
                     }
-                    // 标题：首句自动生成，可改
+                    // Title: auto-generated from the first sentence, editable
                     Text("Title · auto-generated, editable")
                         .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
                     TextField("Name this job…", text: $title, onEditingChanged: { titleEdited = $0 })
@@ -52,7 +55,7 @@ struct TaskComposerView: View {
                         .background(DS.Canvas.card)
                         .clipShape(RoundedRectangle(cornerRadius: DS.R.md, style: .continuous))
 
-                    // 转写正文
+                    // Transcript body
                     Text("Content · voice transcript, tap to edit")
                         .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 8) {
@@ -88,7 +91,7 @@ struct TaskComposerView: View {
                         ErrorLine(text: errorText)
                     }
 
-                    // 发单即接手提示
+                    // "dispatch takes over" hint
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle").font(.system(size: 12))
                         Text("Handed off on create · first node seeded · stops at the gate for you")
@@ -96,7 +99,7 @@ struct TaskComposerView: View {
                     .font(DS.mono(10)).foregroundStyle(DS.Ink.mintDeep)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(red: 1.0, green: 0.973, blue: 0.941)) // #FFF8F0 暖橘白
+                    .background(Color(red: 1.0, green: 0.973, blue: 0.941)) // #FFF8F0 warm orange-white
                     .clipShape(RoundedRectangle(cornerRadius: DS.R.md))
                 }
                 .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 180)
@@ -126,7 +129,7 @@ struct TaskComposerView: View {
         }
     }
 
-    // ── 底部语音条：波形 + 大 mic ──
+    // ── Bottom voice bar: waveform + big mic ──
     private var micBar: some View {
         VStack(spacing: 10) {
             if isListening {
@@ -169,7 +172,7 @@ struct TaskComposerView: View {
         return "\(s / 60):\(String(s % 60).paddingStart(2))"
     }
 
-    // ── 语音 ──
+    // ── Voice ──
     private func toggleMic() {
         if isListening { stopMic(); return }
         guard speech.isConfigured else {
@@ -214,7 +217,7 @@ struct TaskComposerView: View {
         return String(s.prefix(20))
     }
 
-    // ── 发起 ──
+    // ── Submit ──
     private func submit() {
         let t = title.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else {
@@ -236,7 +239,7 @@ struct TaskComposerView: View {
     }
 }
 
-// 对称录音波形（板 10 修正版：沿中线镜像，不用 emoji）。
+// Symmetric recording waveform (board 10 revision: mirrored around the center line, no emoji).
 private struct WaveformView: View {
     let active: Bool
     @State private var phase = false
@@ -257,7 +260,7 @@ private struct WaveformView: View {
     }
 }
 
-// 矢量麦克风（胶囊+杆+底座——emoji 渲染不可靠，板 10/11 修正版）。
+// Vector microphone (capsule + stem + base — emoji rendering is unreliable; board 10/11 revision).
 struct MicGlyph: View {
     var body: some View {
         VStack(spacing: 2) {

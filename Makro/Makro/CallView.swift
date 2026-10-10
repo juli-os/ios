@@ -1,7 +1,10 @@
-// 全屏通话式开单对话（09-29 从 Makro 存档仓 4a4a625^ 捞回复用；原三模式
-// 选择器随「单一开单纪律」裁撤，计划卡字段 session→title）。
-// 麦克常开（连续 STT），每句 recognized 即发送，回复全部朗读；中心状态球
-// 反映当前相位（聆听/思考/朗读），暂存计划卡带 确认开单/取消 按钮。
+// Full-screen call-style intake chat (recovered from the Makro archive repo
+// 4a4a625^ on 09-29; the original tri-mode selector was cut along with the
+// "single intake discipline"; the plan card's session field became title).
+// Always-on mic (continuous STT); every recognized sentence sends
+// immediately; every reply is read aloud; the central status orb reflects
+// the current phase (listening/thinking/speaking); the staged plan card
+// carries confirm-intake/cancel buttons.
 
 import SwiftUI
 
@@ -60,7 +63,7 @@ struct CallView: View {
         if vm.isCallPaused { return "Paused" }
         if vm.isMuted { return "Muted" }
         // Mirror the in-app computed phaseLabel: a staged plan takes over the
-        // cue (lock screen should prompt 确认, not "Listening…").
+        // cue (lock screen should prompt confirmation, not "Listening…").
         if vm.pendingPlan != nil { return "Awaiting your confirm — tap to create the job" }
         return phaseLabel(for: p)
     }
@@ -154,7 +157,7 @@ struct CallView: View {
     /// Card shown when the assistant has proposed an intake plan. The spoken
     /// summary already appeared in the transcript; this shows the structured
     /// brief (title/summary/brief) and the confirm/deny buttons. Confirm →
-    /// server runs startTask（开单正门）; deny → back to discussion.
+    /// server runs startTask (the intake front door); deny → back to discussion.
     @ViewBuilder
     private var pendingPlanCard: some View {
         if let plan = vm.pendingPlan {
@@ -188,7 +191,7 @@ struct CallView: View {
                         .lineLimit(4)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                // 落点（0930）：语音开单同显路由落点——确认即钉进 input.session。
+                // Resolved target session (0930): voice intake shows the routing target too — confirming pins it into input.session.
                 if let landing = plan.landing, !landing.session.isEmpty {
                     Text("Lands: \(landing.session)\(landing.note.isEmpty ? "" : " · \(landing.note)")")
                         .font(DS.text(12, .semibold))
@@ -293,7 +296,7 @@ struct CallView: View {
         switch p {
         case .paused: return "Paused"
         case .listening:
-            // 开单对话=静默自动成回：停顿一下即发送，无需提交短语。
+            // Intake chat = silence auto-completes the turn: a short pause sends; no submit phrase needed.
             return vm.isListening ? "Listening…" : "Preparing…"
         case .thinking: return "Thinking…"
         case .speaking: return "Answering…"

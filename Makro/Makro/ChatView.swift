@@ -1,7 +1,9 @@
-// 发单对话视图（09-29 从 Makro 存档仓 4a4a625^ 捞回复用，文案与入口语义
-// 适配 juli 开单对话：clarify loop → 计划卡 → 确认开单）。
-// ⚠️ CallRouter.pendingStart 的双消费（.onReceive 暖路径 + .task 冷启动
-// 读当前值）是承载性设计，两条都必需——详见下方注释，勿「简化」。
+// Intake chat view (recovered from the Makro archive repo 4a4a625^ on
+// 09-29, copy and entry semantics adapted to the juli intake chat: clarify
+// loop → plan card → confirm intake).
+// ⚠️ CallRouter.pendingStart's double consumption (.onReceive warm path +
+// .task cold-start read of the current value) is a load-bearing design —
+// both are required; see the comments below, do not "simplify".
 
 import SwiftUI
 import PhotosUI
@@ -13,15 +15,17 @@ struct ChatView: View {
     @State private var showCall = false
     @State private var showClearConfirm = false
     @State private var appeared = false
-    // 附件入口（wf_3310501a9fe4）：➕ → 拍照/相册/文件 三选。
+    // Attachment entry (wf_3310501a9fe4): ➕ → pick one of camera/photo library/files.
     @State private var showAttachMenu = false
     @State private var showCamera = false
     @State private var showPhotos = false
     @State private var showFiles = false
     @FocusState private var inputFocused: Bool
 
-    /// 系统分享草稿（wf_030261e0a13a）：Share Extension → App Group → Router，
-    /// 填入输入框聚焦等用户编辑发送（不自动发送——开单确认权在用户）。
+    /// Shared system draft (wf_030261e0a13a): Share Extension → App Group →
+    /// Router; fills the input box and focuses it, waiting for the user to
+    /// edit and send (no auto-send — the intake confirmation right belongs
+    /// to the user).
     private func takeShareDraft() {
         if let draft = DeepLinkRouter.shared.shareDraft, !draft.isEmpty {
             DeepLinkRouter.shared.shareDraft = nil
@@ -30,11 +34,13 @@ struct ChatView: View {
         }
     }
 
-    /// 基于单子创建 follow-up（wf_9d93ee9f7adb）：预填输入框（原单 ID+标题+
-    /// 跟进语义），用户补一句要做什么再发送——仍走「计划卡确认才开单」流程，
-    /// 新单由引擎从对话上下文自然携带原单关联。
+    /// Create a follow-up based on a job (wf_9d93ee9f7adb): prefills the
+    /// input box (original job ID + title + follow-up semantics); the user
+    /// adds a sentence about what to do and sends — still going through the
+    /// "confirm on the plan card to start the job" flow; the engine carries
+    /// the original-job association naturally from the conversation context.
     private func followUp(wfID: String, title: String) {
-        let quoted = title.isEmpty ? "" : "「\(title)」"
+        let quoted = title.isEmpty ? "" : "\"\(title)\""
         inputText = "Follow-up \(wfID)\(quoted): keep iterating with this job’s context —"
         inputFocused = true
     }
@@ -84,8 +90,11 @@ struct ChatView: View {
                             }
                         }
                     }
-                    // 消息流锚定最底（0930 用户裁决）：视图出现（含切 tab 回来
-                    // ——ScrollView 位置不保）直接落在最新消息，不开屏看旧顶部。
+                    // The message stream anchors to the very bottom (0930
+                    // user ruling): on view appearance (including tab
+                    // switches back — ScrollView position is not kept) land
+                    // directly on the newest message; no opening onto the old
+                    // top.
                     .onAppear {
                         if let last = vm.messages.last {
                             proxy.scrollTo(last.id, anchor: .bottom)
@@ -93,9 +102,11 @@ struct ChatView: View {
                     }
                 }
 
-                // 计划卡（0930 补齐：pendingPlan 原本只在 CallView 渲染，
-                // 文字聊天模式收敛后卡片不出现=用户永远等不到「开单」按钮，
-                // 单子开不出来——服务端 phase=proposed 挂着无人消费实证）。
+                // Plan card (0930 backfill: pendingPlan used to render only
+                // in CallView; once the text-chat mode converged, the card
+                // never appeared = the user could never reach the "start"
+                // button and no job got created — server-side evidence:
+                // phase=proposed left hanging, unconsumed).
                 if vm.pendingPlan != nil {
                     planCard
                         .padding(.horizontal, 16)
@@ -119,7 +130,7 @@ struct ChatView: View {
                     ConnectionBadge(state: vm.connectionState)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    // 通话入口 + 清空对话（0929 历史持久化后需要新开一单的出口）。
+                    // Call entry + clear conversation (after 0929 history persistence, an exit was needed to start a new intake).
                     HStack(spacing: 14) {
                         Button { showClearConfirm = true } label: {
                             Image(systemName: "trash")
@@ -138,7 +149,7 @@ struct ChatView: View {
                 CallView(vm: vm)
             }
             .onReceive(DeepLinkRouter.shared.$shareDraft) { draft in
-                // 分享草稿到达（含冷启动 replay）：非空即取走填输入框。
+                // Shared draft arrived (including cold-start replay): if non-empty, take it and fill the input box.
                 if let draft, !draft.isEmpty { takeShareDraft() }
             }
             .onReceive(CallRouter.shared.$pendingStart) { wantsCall in
@@ -151,7 +162,7 @@ struct ChatView: View {
                 await vm.loadHistory()
                 vm.connect()
                 withAnimation(DS.spring) { appeared = true }
-                takeShareDraft() // 冷启动：shareDraft 先于本视图存在（replay 覆盖，双保险）
+                takeShareDraft() // cold start: shareDraft exists before this view (replay covers it, belt and suspenders)
                 // Cold start: Siri may have set the flag before this view
                 // existed, so .onReceive (which only fires on future changes)
                 // would miss it. Check the current value on appear.
@@ -178,9 +189,11 @@ struct ChatView: View {
             // would coalesce `false → true → false → true` into a single
             // emission and silently break re-trigger). DO NOT delete the
             // `.task` current-value check (cold launch would stop working).
-            // 0929：撤掉 onDisappear→disconnect——TabView 切 tab 必触发它，
-            // 聊天中切去看一眼 Flow/Agents 回来就丢中间的回复广播（服务器不
-            // 回放）。socket 生命周期由 VM 按前后台事件管理（见 ChatViewModel）。
+            // 0929: removed onDisappear→disconnect — TabView fires it on
+            // every tab switch, so peeking at Flow/Agents mid-chat dropped
+            // the in-between reply broadcasts on return (the server does not
+            // replay). The socket lifetime is managed by the VM on
+            // foreground/background events (see ChatViewModel).
             .confirmationDialog("Clear this conversation?", isPresented: $showClearConfirm, titleVisibility: .visible) {
                 Button("Clear", role: .destructive) { vm.clearTranscript() }
                 Button("Cancel", role: .cancel) {}
@@ -188,7 +201,7 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - 计划卡（收敛 → 用户确认开单；取消回讨论）
+    // MARK: - Plan card (converged → user confirms intake; cancel returns to the discussion)
 
     @ViewBuilder
     private var planCard: some View {
@@ -221,8 +234,10 @@ struct ChatView: View {
                         .lineLimit(6)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                // 落点（0930「所有的都走路由」）：路由层判定的目标会话——确认
-                // 开单即钉进 input.session；note 显示改道/排队原因。
+                // Resolved target session (0930 "everything goes through
+                // routing"): the target session judged by the routing layer —
+                // confirming intake pins it into input.session; the note
+                // shows the reroute/queue reason.
                 if let landing = plan.landing, !landing.session.isEmpty {
                     HStack(spacing: 6) {
                         Image(systemName: "arrowshape.turn.up.right.fill")
@@ -323,7 +338,7 @@ struct ChatView: View {
                 speakingBar
             }
 
-            // 待发附件托盘（wf_3310501a9fe4）：缩略图/文件 chip 横排可删。
+            // Pending-attachment tray (wf_3310501a9fe4): thumbnail/file chips in a row, deletable.
             if !vm.pendingAttachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -362,7 +377,7 @@ struct ChatView: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
             HStack(spacing: 10) {
-                // ➕ 附件入口（wf_3310501a9fe4）：拍照/相册/文件 三选。
+                // ➕ Attachment entry (wf_3310501a9fe4): pick one of camera/photo library/files.
                 Button { showAttachMenu = true } label: {
                     Image(systemName: "plus.circle")
                         .font(.system(size: 20, weight: .medium))
@@ -426,8 +441,10 @@ struct ChatView: View {
                         guard url.startAccessingSecurityScopedResource() else { continue }
                         defer { url.stopAccessingSecurityScopedResource() }
                         if let data = try? Data(contentsOf: url) {
-                            // R1 P2-8：真 MIME 按 UTType 取——此前拼 "file/pdf"
-                            // 这类非法 MIME 进服务端 ref 与 prompt 行。
+                            // R1 P2-8: take the real MIME via UTType —
+                            // previously hand-built illegal MIME like
+                            // "file/pdf" went into the server-side ref and
+                            // the prompt line.
                             let mime = UTType(filenameExtension: url.pathExtension)?
                                 .preferredMIMEType ?? "application/octet-stream"
                             vm.addPendingAttachment(data: data, name: url.lastPathComponent, mime: mime)
@@ -519,10 +536,14 @@ struct ChatView: View {
     private func send() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !vm.pendingAttachments.isEmpty else { return }
-        // 先收键盘再清文本（2026-10-01 用户实报「发送后输入框仍留原文=消息
-        // 视觉重复」）：输入法/听写的未提交缓冲会在状态清空后把原文回写进
-        // TextField（IME re-commit 竞态）——resign first responder 终结听写/
-        // 组词会话、缓冲随之丢弃；下一拍再补清一次兜底迟到的回写。
+        // Dismiss the keyboard before clearing the text (2026-10-01
+        // user-reported "input box still holds the sent text after sending =
+        // the message looks duplicated"): the IME/dictation uncommitted
+        // buffer re-writes the original text into the TextField after the
+        // state is cleared (an IME re-commit race) — resigning first
+        // responder ends the dictation/composition session and the buffer is
+        // dropped with it; one more clearing beat later mops up any late
+        // re-write.
         inputFocused = false
         inputText = ""
         vm.send(text: text)
@@ -530,9 +551,9 @@ struct ChatView: View {
     }
 }
 
-// MARK: - 附件选择器三件（wf_3310501a9fe4）
+// MARK: - The three attachment pickers (wf_3310501a9fe4)
 
-/// 相册（PhotosPicker 多选，图片类）。
+/// Photo library (PhotosPicker multi-select, images).
 private struct PhotoAttachmentPicker: View {
     @Binding var show: Bool
     let vm: ChatViewModel
@@ -549,9 +570,11 @@ private struct PhotoAttachmentPicker: View {
                 Task {
                     if let data = try? await item.loadTransferable(type: Data.self) {
                         await MainActor.run {
-                            // R1 P2-8：按数据魔数保留原格式名——此前一律强命名
-                            // .jpg/image/jpeg（内容可能是 PNG/HEIC，名实不符）；
-                            // 不引入图片转码。
+                            // R1 P2-8: keep the original format name by data
+                            // magic number — previously everything was
+                            // force-named .jpg/image/jpeg (the content could
+                            // be PNG/HEIC, name and reality mismatched); no
+                            // image transcoding introduced.
                             let kind = Self.imageFormat(data)
                             let base = item.itemIdentifier ?? "image"
                             let name = base.lowercased().hasSuffix(".\(kind.ext)") ? base : "\(base).\(kind.ext)"
@@ -565,7 +588,7 @@ private struct PhotoAttachmentPicker: View {
         .padding()
     }
 
-    /// 数据魔数 → 真 (mime, 扩展名)。未知魔数兜底 jpeg（相机/截图主流）。
+    /// Data magic number → the real (mime, extension). Unknown magic numbers fall back to jpeg (the camera/screenshot majority).
     private static func imageFormat(_ data: Data) -> (mime: String, ext: String) {
         if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return ("image/png", "png") }
         if data.starts(with: [0xFF, 0xD8, 0xFF]) { return ("image/jpeg", "jpg") }
@@ -577,7 +600,7 @@ private struct PhotoAttachmentPicker: View {
     }
 }
 
-/// 拍照（UIImagePickerController camera 薄封装）。
+/// Take a photo (a thin wrapper over the UIImagePickerController camera).
 private struct CameraAttachmentPicker: UIViewControllerRepresentable {
     let vm: ChatViewModel
     @Binding var show: Bool
@@ -612,8 +635,10 @@ private struct MessageRow: View {
     let message: ChatMessage
     var onFollow: ((String, String) -> Void)? = nil
 
-    /// 消息里的单子 ID（wf_8bbd5a47b528）：气泡下渲染任务单卡——标题/状态
-    /// 一眼可见，点卡深链该单产物。同一单多次提到只出一张。
+    /// Job ID inside a message (wf_8bbd5a47b528): renders a work-order card
+    /// under the bubble — title/status visible at a glance; tapping the card
+    /// deep-links to that job's artifacts. The same job mentioned repeatedly
+    /// yields only one card.
     private var workflowRefs: [String] { WorkflowRef.ids(in: message.text) }
 
     var body: some View {

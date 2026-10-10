@@ -27,8 +27,10 @@ enum KeychainHelper {
         attrs[kSecValueData as String] = data
         attrs[kSecAttrAccessible as String] = accessibility
         let status = SecItemAdd(attrs as CFDictionary, nil)
-        // 失败显性留痕（2026-09-20 P3）：静默回退到无密码态最迷惑——至少日志
-        // 里能看到是 SecItemAdd 哪个错误码（-34018 缺 entitlement 等）。
+        // Failures leave a visible trace (2026-09-20 P3): silently falling
+        // back to a no-password state is the most confusing — at least the
+        // log shows which SecItemAdd error code it was (-34018 missing
+        // entitlement, etc.).
         if status != errSecSuccess {
             print("[Keychain] SecItemAdd failed (status \(status)) for account \(account) — secret NOT persisted")
         }

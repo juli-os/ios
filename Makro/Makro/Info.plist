@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>拍照作为任务附件发送给 agent</string>
+	<string>Take photos to send as task attachments to the agent</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -22,7 +22,7 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<!-- 出口合规：仅用系统 HTTPS/TLS，无专有加密——预答 ASC 每次上传的加密问询（2026-09-28 TestFlight 首传）。 -->
+	<!-- Export compliance: system HTTPS/TLS only, no proprietary encryption — pre-answers ASC's per-upload encryption question (2026-09-28 first TestFlight upload). -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
@@ -47,7 +47,7 @@
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
-	<!-- 全屏独占（工作台语义）：退出 iPad 多任务的四方向要求（2026-09-28 TestFlight 首传校验）。 -->
+	<!-- Full-screen exclusive (workbench semantics): the four-orientation requirement to exit iPad multitasking (verified at the 2026-09-28 first TestFlight upload). -->
 	<key>UIRequiresFullScreen</key>
 	<true/>
 	<key>UISupportedInterfaceOrientations</key>

@@ -1,9 +1,12 @@
 import SwiftUI
 
-/// Artifacts 双列卡片（2026-10-01 定稿，neo 选型方案三·全要素版）：
-/// 每卡六层全要素——图标+相对时间 / 文件名两行主体 / 会话徽章+大小 /
-/// 浅分隔线 / 案卷+终端芯片直接可点。原有元素一个不丢，字号整体缩一档。
-/// 筛选层：搜索 + 类型 chips + 会话下拉（横滚 session chips 退役）。
+/// Artifacts two-column cards (finalized 2026-10-01, neo's option three ·
+/// full-element version): every card carries all six layers — icon +
+/// relative time / two-line filename body / session badge + size / light
+/// divider / case + terminal chips directly tappable. Not one original
+/// element lost; one font-size step smaller overall.
+/// Filter layer: search + type chips + session dropdown (the horizontally
+/// scrolling session chips were retired).
 /// Both filters are client-side against a single full fetch, so switching
 /// is instant. Tap card to preview; chips navigate without leaving the list.
 struct ArtifactsView: View {
@@ -46,12 +49,13 @@ struct ArtifactsView: View {
                         .tracking(-0.3)
                         .foregroundStyle(.primary)
                 }
-                // 刷新按钮退役（板 02 手势统一）：下拉即刷；本页右上无主动作。
+                // Refresh button retired (board 02 gesture unification): pull down to refresh; no primary action top-right on this page.
             }
             .pullToRefresh { await vm.loadArtifacts() }
             .onReceive(DeepLinkRouter.shared.$artifactsProducer) { producer in
-                // 板 06 跨维芯片落地：Agents 卡的「它的产物」→ 这里按
-                // producer（会话名）过滤。清掉一次性值防回头污染。
+                // Board 06 cross-dimension chip landed: the Agents card's
+                // "its artifacts" → filtered here by producer (session name).
+                // Clear the one-shot value so it cannot pollute on the way back.
                 guard let producer else { return }
                 vm.selectedSession = producer
                 DeepLinkRouter.shared.artifactsProducer = nil
@@ -197,8 +201,9 @@ struct ArtifactsView: View {
     }
 
     private var cardGrid: some View {
-        // 定稿（2026-10-01）：双列卡片全要素，无时间分组——分组轴由
-        // 「相对时间」在卡内表达，列表纯 mtime 倒序。
+        // Final (2026-10-01): two-column cards with all elements, no time
+        // grouping — the time axis is expressed inside the card by "relative
+        // time"; the list is purely mtime descending.
         LazyVGrid(columns: columns, spacing: 10) {
             ForEach(Array(vm.filtered.enumerated()), id: \.element.id) { idx, a in
                 ArtifactCard(
@@ -299,7 +304,7 @@ private struct TypeChip: View {
     }
 }
 
-// MARK: - Artifact card（定稿六层：全要素·缩小一档）
+// MARK: - Artifact card (final six layers: all elements · one size smaller)
 
 private struct ArtifactCard: View {
     let artifact: Artifact
@@ -312,7 +317,7 @@ private struct ArtifactCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // ① 顶行：类型图标 + 相对时间
+            // ① Top row: type icon + relative time
             HStack(alignment: .center) {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(tint.opacity(0.14))
@@ -328,7 +333,7 @@ private struct ArtifactCard: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
-            // ② 文件名两行主体（定稿核心：长名基本看全）
+            // ② Two-line filename body (core of the final: long names mostly fully visible)
             Text(artifact.name)
                 .font(DS.text(12.5, .semibold))
                 .foregroundStyle(.primary)
@@ -336,10 +341,13 @@ private struct ArtifactCard: View {
                 .multilineTextAlignment(.leading)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
-            // ③④⑤ 小标签层整体退役（wf_8c1894d4bec0 用户回修：挤在一起的
-            // 会话徽章/案卷芯片/终端芯片 8.5pt 小字看不出信息）——换一行看得
-            // 清的「所属单」：状态色点 + 单标题（服务端 join 全文，两行可读），
-            // 点行开案卷详情；无所属单（legacy）退化为大小小字。
+            // ③④⑤ The small-label layer was retired wholesale
+            // (wf_8c1894d4bec0 user rework: 8.5pt session badge / case chip /
+            // terminal chip crammed together carried no readable information)
+            // — replaced by one readable "owning job" line: a status-colored
+            // dot + the job title (full text from the server join, two
+            // readable lines); tapping the row opens the case detail; without
+            // an owning job (legacy) it degrades to small size text.
             if let wf = artifact.workflow ?? legacyCaseRef {
                 Button { onOpenCase(wf.id) } label: {
                     HStack(alignment: .center, spacing: 6) {
@@ -379,7 +387,7 @@ private struct ArtifactCard: View {
         }
     }
 
-    /// legacy 兜底：无服务端 join 时用本地 caseTitles 映射拼 ref（id=session 即 wfId 口径）。
+    /// Legacy fallback: without the server join, assemble the ref from the local caseTitles map (id=session, i.e. the wfId basis).
     private var legacyCaseRef: ArtifactWorkflowRef? {
         guard let t = caseTitle, !t.isEmpty else { return nil }
         return ArtifactWorkflowRef(id: artifact.session, title: t, status: "completed")
@@ -395,7 +403,7 @@ private struct ArtifactCard: View {
         }
     }
 
-    // 定稿：相对时间——今天 HH:mm / 昨天 / 更早 MM-dd（分组退役后卡内表达时间轴）
+    // Final: relative time — today HH:mm / yesterday / older MM-dd (with grouping retired, the time axis lives inside the card)
     static func relativeTime(_ ts: Int64) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(ts))
         let cal = Calendar.current
@@ -416,7 +424,7 @@ private struct ArtifactCard: View {
     }
 }
 
-// MARK: - Skeleton card（双列占位）
+// MARK: - Skeleton card (two-column placeholder)
 
 private struct ArtifactCardSkeleton: View {
     var body: some View {
@@ -490,14 +498,14 @@ final class ArtifactViewModel: ObservableObject {
     @Published private(set) var artifacts: [Artifact] = []
     @Published private(set) var isLoading = false
     @Published var error: String?
-    /// 案卷标题映射：中央库把 cases/<wfId> 映射为 session=wfId——徽章显示
-    /// 案卷名而非天书 id（板 08）。
+    /// Case-title mapping: the hub maps cases/<wfId> to session=wfId — the
+    /// badge shows the case name instead of a cryptic id (board 08).
     @Published private(set) var caseTitles: [String: String] = [:]
 
     private let api = APIClient.shared
 
     // Client-side filter: session menu + type chip + name search, instant (no network).
-    /// searched = 会话 + 名称搜索（类型 chips 的计数基准，不受类型筛选影响）
+    /// searched = session + name search (the count basis for type chips, unaffected by the type filter)
     var searched: [Artifact] {
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         return artifacts.filter { a in
@@ -513,7 +521,7 @@ final class ArtifactViewModel: ObservableObject {
         }
     }
 
-    /// 类型 chips 的计数（以「会话+搜索」结果为基准，不受类型自身筛选影响）。
+    /// Counts for the type chips (based on the "session + search" result, unaffected by the chips' own filter).
     func count(for tf: TypeFilter) -> Int {
         switch tf {
         case .all: return searched.count
@@ -535,7 +543,7 @@ final class ArtifactViewModel: ObservableObject {
     var isAllSessions: Bool { selectedSession == nil }
 
     func loadArtifacts() async {
-        // 板 08：wf id → 案卷标题映射（案卷名芯片的数据源）。
+        // Board 08: wf id → case-title mapping (data source for the case-name chip).
         Task {
             if let wfs = try? await APIClient.shared.fetchWorkflows(limit: 500) {
                 let map = Dictionary(uniqueKeysWithValues: wfs.map { ($0.id, $0.title) })

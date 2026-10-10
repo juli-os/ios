@@ -1,12 +1,17 @@
 import SwiftUI
 
-// 路由 DAG · iOS 竖带投影（板 M；契约=docs/ui-redesign/routing-dag/CONTRACT.md，
-// apply 2026-09-21）。竖带转轴：层=横带自上而下，与桌面同一套分层语义；语义色
-// 按本端 DS 约定（working=mint 呼吸 / live=done / 落回=amber / 离线=zinc）。
-// 降噪裁决（板 L）：手机一眼三件事——我的单走哪（trace 点亮）/ 谁在忙 / 什么
-// 最热；边不画贝塞尔，落回与绑定以卡上徽标呈现（横列弧线是桌面形态）。
+// Routing DAG · the iOS vertical-band projection (board M; contract =
+// docs/ui-redesign/routing-dag/CONTRACT.md, applied 2026-09-21). Vertical
+// band axis: layers = horizontal bands top-to-bottom, the same layering
+// semantics as desktop; semantic colors follow this client's DS conventions
+// (working = breathing mint / live = done / fallback = amber / offline =
+// zinc).
+// Noise-reduction ruling (board L): three things at a glance on the phone —
+// where my job goes (trace lights up) / who is busy / what is hottest; no
+// bezier edges; fallback and binding appear as badges on cards (the
+// horizontal arcs are the desktop form).
 
-// MARK: - 数据
+// MARK: - Data
 
 struct RouteEvent {
     let id: Int64
@@ -49,7 +54,7 @@ struct DagBand: Identifiable {
     var id: String { key }
 }
 
-// MARK: - 布局（纯函数：切维=换分层函数，与桌面 layout.ts 同语义）
+// MARK: - Layout (pure functions: switching dimension = swapping the layering function, same semantics as the desktop layout.ts)
 
 enum RoutingLayout {
 
@@ -151,7 +156,7 @@ final class RoutingDagViewModel: ObservableObject {
     @Published var bands: [DagBand] = []
     @Published var traceWF: String?
     @Published var traceSessions: Set<String> = []
-    /// 追踪落空提示（目标单已滚出最近分发窗口）——显式告知，不冒充真实路由。
+    /// Trace-miss notice (the target job has scrolled out of the recent-dispatch window) — say so explicitly, do not fake a real route.
     @Published var traceNotice: String?
     @Published var recent: [APIClient.MeshRoute] = []
     @Published var errorMessage: String?
@@ -186,7 +191,7 @@ final class RoutingDagViewModel: ObservableObject {
         }
     }
 
-    /// 该案卷真实走过的路由（Q6）：入口 + 会话点亮，其余降暗。
+    /// The route this case actually took (Q6): the entry + session lit, everything else dimmed.
     private func retrace(graph: APIClient.AgentsGraph, wf: String) {
         var nodes = Set<String>()
         for r in graph.recent where r.workflow == wf {
@@ -194,8 +199,10 @@ final class RoutingDagViewModel: ObservableObject {
             if let s = r.session { nodes.insert("s:\(s)") }
         }
         if nodes.isEmpty {
-            // 追踪目标不在 graph.recent（服务端仅保留最近若干条）里：退出
-            // trace 态并显式提示——全图照常点亮不再是「真实路由点亮」。
+            // The trace target is not in graph.recent (the server keeps only
+            // the most recent few): exit trace mode and say so explicitly —
+            // lighting up the whole graph would no longer be "real route
+            // lighting".
             traceWF = nil
             traceSessions = []
             traceNotice = "This casefile is beyond the recent-dispatch window (only \(graph.recent.count) kept) — its real route cannot be replayed"

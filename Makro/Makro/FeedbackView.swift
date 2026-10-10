@@ -1,8 +1,11 @@
 import SwiftUI
 
-// 反馈视图（2026-09-28 自举）：手机端随手给 juli 自己提反馈——提交走
-// juli-service 渠道（juli-dev 处理，闸门人审），墙=juli 自有渠道镜像只读。
-// 场景：出门在外/在家沙发上持续 feedback（用户实录诉求）。
+// Feedback view (2026-09-28 bootstrapped): quick feedback to juli itself
+// from the phone — submissions go through the juli-service channel (juli-dev
+// handles it, a human reviews at the gate); the wall = a mirrored read-only
+// view of juli's own channel.
+// Scenario: continuous feedback while out or on the couch at home (a
+// recorded user need).
 
 struct FeedbackView: View {
     @State private var body_ = ""
@@ -19,7 +22,7 @@ struct FeedbackView: View {
     var body: some View {
         NavigationStack {
             List {
-                // ---- 提交卡 ----
+                // ---- Submit card ----
                 Section {
                     TextField("Ref (optional): page / ticket / element", text: $page)
                         .autocorrectionDisabled()
@@ -68,13 +71,13 @@ struct FeedbackView: View {
                     Text("Into the juli-service channel: the job lands in the juli-dev session, three-part artifacts pass the gate, approval edits the repo.")
                 }
 
-                // ---- 反馈墙（juli 自有渠道）----
+                // ---- Feedback wall (juli's own channel) ----
                 Section {
                     if wallLoading {
                         HStack { ProgressView(); Text("Loading…").foregroundStyle(.secondary) }
                     } else {
                         if let wallError {
-                            // 加载失败≠暂无记录：错误显式可见；存量记录照常展示。
+                            // A load failure ≠ no records: the error is explicitly visible; existing records still display.
                             Label("Load failed: \(wallError) (pull to retry)", systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
                                 .foregroundStyle(.red)
@@ -160,8 +163,9 @@ struct FeedbackView: View {
             wall = Array(records.prefix(50))
             wallError = nil
         } catch {
-            // 失败不清空存量记录（旧数据仍可看），但错误必须可见，
-            // 不得让墙冒充「暂无记录」。
+            // A failure does not clear existing records (old data stays
+            // viewable), but the error must be visible — the wall must never
+            // masquerade as "no records yet".
             wallError = error.localizedDescription
         }
     }
@@ -175,7 +179,7 @@ struct FeedbackView: View {
         }
     }
 
-    /// "2026-09-28T12:08:30.665Z" → "09-28 20:08"（北京时间）。
+    /// "2026-09-28T12:08:30.665Z" → "09-28 20:08" (Beijing time).
     private func shortTime(_ iso: String) -> String {
         var comps = String(iso.prefix(16)).split(separator: "T")
         guard comps.count == 2 else { return iso }

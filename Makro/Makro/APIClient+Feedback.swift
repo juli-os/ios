@@ -1,9 +1,11 @@
 import Foundation
 
-// 反馈进件（2026-09-28 自举：手机端随手 feedback）。走 juli-service 渠道
-// （POST /api/feedback-self/submit——与 web 提交卡/悬浮挂件同一端点、同一
-// 手动语义：dedup 保留、判定豁免，单落 juli-dev 闸门人审）。墙=镜像只读面，
-// 客户端过滤 juli 自有渠道（juli-service/juli-site）。
+// Feedback intake (2026-09-28 bootstrapped: quick feedback from the phone).
+// Goes through the juli-service channel (POST /api/feedback-self/submit —
+// the same endpoint and the same manual semantics as the web submit card /
+// floating widget: dedup kept, judgment exempted, landing only in the
+// juli-dev human-review gate). The wall = a mirrored read-only surface; the
+// client filters to juli's own channels (juli-service/juli-site).
 
 struct FeedbackWallRecord: Identifiable, Codable, Equatable {
     let id: String
@@ -35,7 +37,7 @@ struct FeedbackSubmitResult {
 
 extension APIClient {
 
-    /// 提交 juli 自身反馈 → juli-service 渠道起单（手动语义）。
+    /// Submit feedback about juli itself → starts a job through the juli-service channel (manual semantics).
     func submitFeedback(body: String, page: String, author: String) async throws -> FeedbackSubmitResult {
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/feedback-self/submit")
         var request = authedRequest(url: url)
@@ -56,7 +58,7 @@ extension APIClient {
         )
     }
 
-    /// 反馈墙（镜像全量 → 客户端过滤 juli 自有渠道，最新在前）。
+    /// Feedback wall (full mirror → the client filters to juli's own channels, newest first).
     func fetchFeedbackWall() async throws -> [FeedbackWallRecord] {
         let url = Config.shared.httpBaseURL.appendingPathComponent("api/feedback-mirror/records")
         var request = authedRequest(url: url)

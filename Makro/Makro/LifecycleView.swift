@@ -38,8 +38,9 @@ final class LifecycleViewModel: ObservableObject {
     @Published var selectedArtifacts: [CaseArtifact] = []
     @Published var errorMessage: String?
     @Published var gateError: String?
-    /// 详情 sheet 内动作的失败原因——与轮询刷新的 errorMessage 分离，
-    /// 只在下一次动作发起时清（否则 5s 轮询会把 400 原因一闪而过清掉）。
+    /// Failure reason for actions inside the detail sheet — kept separate from
+    /// the polling-refreshed errorMessage; cleared only when the next action
+    /// starts (otherwise the 5s poll would wipe the 400 reason in a flash).
     @Published var actionError: String?
     @Published var acting = false
 
@@ -65,8 +66,8 @@ final class LifecycleViewModel: ObservableObject {
         // workflow list (and vice versa). Failures keep the last good data
         // on screen — an empty flash after every backend restart reads as
         // "broken"; stale-but-real beats blank. The gate inbox additionally
-        // raises a visible error: "0 待审批" and "拉取失败" must never look
-        // identical on an approval surface.
+        // raises a visible error: "0 pending" and "fetch failed" must never
+        // look identical on an approval surface.
         do {
             gates = try await APIClient.shared.fetchGateQueue()
             gateError = nil
@@ -84,7 +85,7 @@ final class LifecycleViewModel: ObservableObject {
             }
         }
         if let id = selectedID {
-            // 与 gates/workflows 同口径：瞬时失败保留旧数据，不闪回骨架屏。
+            // Same policy as gates/workflows: a transient failure keeps the old data; no skeleton flash.
             if let tree = try? await APIClient.shared.fetchWorkflowTree(id) {
                 selectedTree = tree
             }
@@ -92,7 +93,7 @@ final class LifecycleViewModel: ObservableObject {
         }
     }
 
-    /// 单子级免批切换（2026-10-07）：POST 后重拉 tree 刷新徽标。
+    /// Per-workflow auto-approve toggle (2026-10-07): POST then re-fetch the tree to refresh the badge.
     func setAutoApprove(_ id: String, on: Bool) async throws {
         try await APIClient.shared.setAutoApprove(workflowId: id, on: on)
     }
@@ -131,7 +132,7 @@ final class LifecycleViewModel: ObservableObject {
         await act(item, action: "resolve", note: note)
     }
 
-    /// 驳回回修:feedback 进入前一步任务卡重做,轮次+1。
+    /// Reject & rework: the feedback re-runs the previous step; round +1.
     func rework(stepID: String, feedback: String) async {
         acting = true
         actionError = nil
@@ -147,7 +148,7 @@ final class LifecycleViewModel: ObservableObject {
         try await APIClient.shared.reworkStep(stepID: stepID, feedback: feedback)
     }
 
-    /// 对齐修正:人定稿最高优先修正,入档为 amendment,流程继续。
+    /// Course amendment: the human's final wording wins and is filed as an amendment; the run continues.
     func align(stepID: String, amendment: String) async {
         acting = true
         actionError = nil
@@ -163,29 +164,32 @@ final class LifecycleViewModel: ObservableObject {
         await refresh()
     }
 
-    /// 一等插话：投递到在途 agent 步并留痕（干预史/活动时间线/审计事件）。
-    /// 失败即拒绝（服务端校验 agent/verify 且 running），账本只记发生过的事。
+    /// First-class intervene: delivered to the in-flight agent step and traced
+    /// (intervention history / activity timeline / audit events). Failures are
+    /// rejected (server validates agent/verify and running); the ledger only
+    /// records what actually happened.
     func intervene(stepID: String, text: String) async throws {
         try await APIClient.shared.interveneStep(stepID: stepID, text: text)
         await refresh()
     }
 
-    /// deny 的 throwing 形态：sheet 内就地展示失败原因（服务端 400 正文）。
+    /// Throwing form of deny: the sheet shows the failure reason in place (server 400 body).
     func denyThrowing(_ item: GateQueueItem, note: String) async throws {
         try await APIClient.shared.gateAction(stepID: item.step.id, action: "deny", note: note)
         await refresh()
     }
 
-    /// 强制关闭 running 流水（终局逃生舱）：与 resolve 不同——不必等闸门，
-    /// 任何 running 状态都可终结；在途步全部 cancelled，事实留账本。
+    /// Force-close a running pipeline (terminal escape hatch): unlike resolve,
+    /// no gate wait — any running state can be ended; in-flight steps are all
+    /// cancelled and the facts stay in the ledger.
     func forceClose(_ workflowID: String, note: String) async throws {
         try await APIClient.shared.forceCloseWorkflow(workflowID, note: note)
         await refresh()
     }
 
-    // MARK: - 案卷级动作（web 对齐批次1）
+    // MARK: - Case-level actions (web alignment batch 1)
 
-    /// 办结：nodes 模式动作跑完后显式结算。
+    /// Settle: explicit settlement after nodes-mode actions finish.
     func settle(_ workflowID: String) async {
         acting = true
         actionError = nil
@@ -196,7 +200,7 @@ final class LifecycleViewModel: ObservableObject {
         } catch { actionError = error.localizedDescription }
     }
 
-    /// 失败收口：failed 案卷正式关闭。
+    /// Failed close-out: formally closes a failed case.
     func closeFailed(_ workflowID: String, note: String) async {
         acting = true
         actionError = nil
@@ -207,7 +211,7 @@ final class LifecycleViewModel: ObservableObject {
         } catch { actionError = error.localizedDescription }
     }
 
-    /// 定时发送：批准发送闸门并定档（默认明早 09:00）。
+    /// Scheduled send: approves the send gate and schedules delivery (default tomorrow 09:00).
     func scheduleApprove(stepID: String, at date: Date) async {
         acting = true
         actionError = nil
@@ -219,7 +223,7 @@ final class LifecycleViewModel: ObservableObject {
         } catch { actionError = error.localizedDescription }
     }
 
-    /// 单步取消：不牵连整单（pending/waiting 合法）。
+    /// Cancel one step: does not affect the whole job (pending/waiting are legal).
     func cancelStep(_ stepID: String) async {
         acting = true
         actionError = nil
@@ -230,7 +234,7 @@ final class LifecycleViewModel: ObservableObject {
         } catch { actionError = error.localizedDescription }
     }
 
-    /// 补正重发：send 守卫拒发后的补正通道。
+    /// Amend & resend: the correction channel after the send guard refuses.
     func reworkSend(_ stepID: String, feedback: String) async {
         acting = true
         actionError = nil
@@ -241,7 +245,7 @@ final class LifecycleViewModel: ObservableObject {
         } catch { actionError = error.localizedDescription }
     }
 
-    /// 重试并改指令：retry 携 plan 覆写（agent/verify 步）。
+    /// Retry with new instructions: retry carrying a plan override (agent/verify steps).
     func retryWithPlan(_ stepID: String, plan: String) async {
         acting = true
         actionError = nil
@@ -282,8 +286,9 @@ final class LifecycleViewModel: ObservableObject {
 struct LifecycleView: View {
     @StateObject private var vm = LifecycleViewModel()
     @State private var appeared = false
-    // 常驻指标（wf_2efe5185faf6 三指标 → wf_66a9b632154d 四指标+缓存命中率）：
-    // Flow 顶部一眼概况，细节进 Dashboard。
+    // Persistent stats row (wf_2efe5185faf6 three metrics → wf_66a9b632154d
+    // four metrics + cache hit rate): a glance summary at the top of Flow;
+    // details live in the Dashboard.
     @State private var dashTodayTokens: String = "…"
     @State private var dashTodayPrompts: String = "…"
     @State private var dashCacheRate: String?
@@ -296,8 +301,8 @@ struct LifecycleView: View {
         guard let s = try? await APIClient.shared.fetchDashboardStats(days: 1) else { return }
         dashTodayTokens = Self.fmtTokensCompact(s.tokens.today.inputTokens + s.tokens.today.outputTokens)
         dashTodayPrompts = "\(s.tokens.today.calls)"
-        // z.ai 计费口径命中率（wf_66a9b632154d）：cached_tokens / input_tokens
-        //（cached 是 input 子集；input=0 时无意义不显）。
+        // z.ai billing-basis hit rate (wf_66a9b632154d): cached_tokens / input_tokens
+        // (cached is a subset of input; hidden as meaningless when input=0).
         let inp = s.tokens.today.inputTokens
         let cached = s.tokens.today.cachedTokens ?? 0
         dashCacheRate = inp > 0 ? String(format: "%.1f%%", cached / inp * 100) : nil
@@ -363,7 +368,7 @@ struct LifecycleView: View {
             .background(DS.Canvas.app.ignoresSafeArea())
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    // Dashboard 入口（wf_e86d52c97b51，调研 IA：不加 tab，查看面）
+                    // Dashboard entry (wf_e86d52c97b51, research IA: no tab, view-only surface)
                     NavigationLink {
                         DashboardView()
                     } label: {
@@ -374,7 +379,7 @@ struct LifecycleView: View {
                     .accessibilityLabel("Dashboard")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    // 发单入口（板 10）：语音优先，startTask 发单即接手。
+                    // Intake entry (board 10): voice-first; startTask takes over upon dispatch.
                     Button {
                         showComposer = true
                     } label: {
@@ -427,16 +432,19 @@ struct LifecycleView: View {
             }
             .sheet(isPresented: $showComposer) {
                 TaskComposerView { newID in
-                    // 等发单 sheet 收起动画完成再呈现详情（同视图两级 presentation 竞态）。
+                    // Wait for the intake sheet's dismissal animation before presenting the
+                    // detail (two-level presentation race on the same view).
                     Task {
                         try? await Task.sleep(nanoseconds: 450_000_000)
                         await vm.select(newID)
                     }
                 }
             }
-            // 驳回二选一（对齐 web 8f68aba/eadbaa1 语义）：回修=意见注入前
-            // 一步重做（必填，本地拦截空文本）；方向修正=人定稿 align 入档、
-            // 流程继续；强制驳回=终局。空意见直接本地提示，不等服务端 400。
+            // Reject offers two paths (aligned with web 8f68aba/eadbaa1 semantics):
+            // rework = note injected, previous step re-runs (required, empty text
+            // blocked locally); course amendment = human-final align filed, run
+            // continues; force reject = terminal. An empty note is flagged locally
+            // right away, without waiting for the server's 400.
             .sheet(item: $reworkTarget) { item in
                 ReworkSheet(item: item, vm: vm)
                     .presentationDetents([.medium])
@@ -461,8 +469,9 @@ struct LifecycleView: View {
         }
     }
 
-    /// 常驻三指标行（wf_2efe5185faf6）：Flow 顶部一眼概况——与 Dashboard
-    /// 指标卡同口径（自然日/含缓存输入+输出），点行进 Dashboard 看细节。
+    /// Persistent three-metric row (wf_2efe5185faf6): a glance summary at the top
+    /// of Flow — same basis as the Dashboard metric cards (calendar day /
+    /// cache-included input + output); tap the row to open the Dashboard.
     private var headerStatsRow: some View {
         NavigationLink {
             DashboardView()
@@ -517,9 +526,10 @@ struct LifecycleView: View {
     private struct WorkflowSheetTarget: Identifiable { let id: String }
 }
 
-/// 驳回二选一面板：回修（feedback 必填，本地拦截空文本）或方向修正
-/// （align 人定稿，流程继续）。错误就地显示——不再落到被 sheet 挡住的
-/// 列表横幅。服务端契约（eadbaa1）：空 feedback 会被 400。
+/// Two-path reject panel: rework (feedback required, empty text blocked locally)
+/// or course amendment (align with the human's final wording, run continues).
+/// Errors show in place — no longer falling through to the list banner hidden
+/// behind the sheet. Server contract (eadbaa1): empty feedback gets a 400.
 struct ReworkSheet: View {
     let item: GateQueueItem
     @ObservedObject var vm: LifecycleViewModel
@@ -530,7 +540,7 @@ struct ReworkSheet: View {
 
     private var trimmed: String { feedback.trimmingCharacters(in: .whitespaces) }
 
-    // 板 04：意见卡（必填+计数 72/500）→ 三动作行 → 底注。
+    // Board 04: note card (required + counter 72/500) → three action rows → footnote.
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -749,7 +759,7 @@ private struct GateCard: View {
                 .background(DS.Canvas.app)
                 .clipShape(RoundedRectangle(cornerRadius: DS.R.sm))
             }
-            // ── 审批内容 ──
+            // ── Content under review ──
             if item.step.bodyInline != nil || item.step.bodyRef != nil || !deliverables.isEmpty || item.step.fallbackBody != nil {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("For review")
@@ -769,7 +779,7 @@ private struct GateCard: View {
                         .font(DS.mono(11, .semibold))
                         .tint(DS.Ink.mint)
                     } else if let fallback = item.step.fallbackBody {
-                        // 无契约 fallback：交付物指针缺席时正文的最后防线。
+                        // Contract-less fallback: last line of defense for the body when deliverable pointers are absent.
                         Text(fallback)
                             .font(.system(size: 12))
                             .lineLimit(bodyExpanded ? nil : 8)
@@ -789,7 +799,7 @@ private struct GateCard: View {
                         }
                     }
                     ForEach(Array(deliverables.enumerated()), id: \.offset) { _, d in
-                        // body_ref 已单列时跳过同名 body 工件，避免重复行。
+                        // Skip the same-name body artifact when body_ref already has its own row, to avoid duplicates.
                         if let id = d.id, !(item.step.bodyRef != nil && d.viewRole == "body") {
                             ContentRow(
                                 label: d.viewRole == "body" ? "Body" : "Deliverables",
@@ -931,10 +941,11 @@ enum MakroISO {
     }()
 }
 
-// 费用分析段（wf_6a74fc4a23e4）：每单 API 等效成本 × 价位分桶分布——
-// KPI 行 + 分桶堆叠柱（Swift Charts）。默认收起，首次展开才拉
-// /api/lifecycle/cost-stats；散点/点穿下钻是桌面 Web 专属（小屏不做，
-// 记 FRONTEND-PARITY.md）。
+// Cost analysis section (wf_6a74fc4a23e4): per-job API-equivalent cost × tier
+// bucket distribution — KPI row + stacked bucket bars (Swift Charts). Collapsed
+// by default; /api/lifecycle/cost-stats is fetched on first expand. Scatter /
+// drill-down stays desktop-Web-only (not built for small screens; see
+// FRONTEND-PARITY.md).
 private struct CostAnalysisSection: View {
     @State private var expanded = false
     @State private var days: Int = 30
@@ -1027,7 +1038,7 @@ private struct CostAnalysisSection: View {
         .clipShape(RoundedRectangle(cornerRadius: DS.R.sm, style: .continuous))
     }
 
-    /// 分桶 × 单量（按模型堆叠）：柱值=单量，图例带模型拆分。
+    /// Buckets × job count (stacked by model): bar value = job count, legend carries the model split.
     private func bucketChart(_ s: CostStats) -> some View {
         Chart {
             ForEach(s.buckets, id: \.label) { b in
@@ -1050,7 +1061,7 @@ private struct CostAnalysisSection: View {
     }
 
     private func footnoteText(_ s: CostStats) -> String {
-        var l = "Basis: per-job usageCost summed (BigModel list \(s.pricingRetrievedAt ?? "—") snapshot; cache/input/output rates; cancelled jobs included; \(days == 0 ? "All time" : "last \(days) days")。"
+        var l = "Basis: per-job usageCost summed (BigModel list \(s.pricingRetrievedAt ?? "—") snapshot; cache/input/output rates; cancelled jobs included; \(days == 0 ? "All time" : "last \(days) days")."
         if let unpriced = s.unpricedOrders, !unpriced.isEmpty {
             l += " \(unpriced.count) jobs use models outside the price list (usage counted, not priced)."
         }
@@ -1078,7 +1089,7 @@ private struct WorkflowListSection: View {
     @State private var filter: StatusFilter = .all
     @State private var newestFirst = true
 
-    // 双列卡片（2026-10-01，照 Artifacts 定稿 5bd3cdc 同款模式）
+    // Two-column cards (2026-10-01, same pattern as the Artifacts final 5bd3cdc)
     private let columns = [
         GridItem(.flexible(), spacing: 10),
         GridItem(.flexible(), spacing: 10)
@@ -1124,8 +1135,9 @@ private struct WorkflowListSection: View {
         MakroISO.date(from: w.updated_at) ?? .distantPast
     }
 
-    /// iOS 26 SDK 下 onTapGesture 闭包内联 Task 触发 init 自歧义
-    /// （sending @isolated(any) 参数）——抽到方法体给明确 Void 上下文。
+    /// Under the iOS 26 SDK an inline Task in an onTapGesture closure makes the
+    /// init ambiguous (sending @isolated(any) parameter) — hoisted into a method
+    /// body for an explicit Void context.
     private func openWorkflow(_ id: String) {
         Task { await vm.select(id) }
     }
@@ -1267,9 +1279,11 @@ enum FlowStatus {
     static func animated(_ s: String) -> Bool { s == "running" }
 }
 
-// WorkflowCard（2026-10-01 双列卡片化，照 ArtifactCard 定稿 5bd3cdc 同款五层）：
-// 六要素全保留——状态点+呼吸动画 / 状态文字 / R 轮次徽章 / 标题两行主体 /
-// kind·项目·会话·⏸等待 / 相对时间；字号整体缩一档，样式参数与 artifact 卡对齐。
+// WorkflowCard (2026-10-01 two-column rework, same five layers as the
+// ArtifactCard final 5bd3cdc): all six elements kept — status dot + breathing
+// animation / status text / R round badge / two-line title body /
+// kind·project·session·⏸waiting / relative time; one font-size step smaller
+// overall, style parameters aligned with the artifact card.
 private struct WorkflowCard: View {
     let workflow: LifecycleWorkflow
 
@@ -1277,7 +1291,7 @@ private struct WorkflowCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // ① 顶行：状态点+状态文字+R 徽章 | 相对时间
+            // ① Top row: status dot + status text + R badge | relative time
             HStack(alignment: .center, spacing: 5) {
                 Circle()
                     .fill(statusColor)
@@ -1300,7 +1314,7 @@ private struct WorkflowCard: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
-            // ② 标题两行主体（核心收益：长标题看全，旧版单行截断）
+            // ② Two-line title body (core win: long titles fully visible vs the old single-line truncation)
             Text(workflow.title)
                 .font(DS.text(12.5, .semibold))
                 .foregroundStyle(.primary)
@@ -1308,7 +1322,7 @@ private struct WorkflowCard: View {
                 .multilineTextAlignment(.leading)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
-            // ③④ 浅分隔线 + 元信息行（kind·项目·会话 | ⏸等待徽章）
+            // ③④ Light divider + meta row (kind·project·session | ⏸waiting badge)
             HStack(spacing: 5) {
                 Text(workflow.kind)
                 if let p = workflow.project { Text("· \(p)") }
@@ -1341,7 +1355,7 @@ private struct WorkflowCard: View {
         .clipShape(RoundedRectangle(cornerRadius: DS.R.md, style: .continuous))
     }
 
-    // 相对时间（artifact 卡同款）：今天 HH:mm / 昨天 / 更早 MM-dd
+    // Relative time (same as the artifact card): today HH:mm / yesterday / older MM-dd
     private static func relativeTime(_ iso: String) -> String {
         guard let date = MakroISO.date(from: iso) else { return "" }
         let cal = Calendar.current
@@ -1359,7 +1373,7 @@ struct WorkflowDetailSheet: View {
     @ObservedObject var vm: LifecycleViewModel
     let workflowID: String
 
-    // 插话纠偏 lives HERE (the sheet owns the running-step contextMenu) —
+    // Intervene-to-correct lives HERE (the sheet owns the running-step contextMenu) —
     // an earlier attempt parked this state in GateCard and read it from the
     // sheet: different structs, so the alert could never fire, and the
     // missing stepSession() helper left the tree unbuildable.
@@ -1390,9 +1404,10 @@ struct WorkflowDetailSheet: View {
         NavigationStack {
             Group {
                 if let tree = vm.selectedTree {
-                    // 板 05：案卷详情 = 自绘卡片流（独立圆角白卡 + Section 头
-                    // 平铺在底色上），原生 List/Section 是老 structure（与
-                    // Agents 主页同款病，视觉裁决：设计为无分割线卡片）。
+                    // Board 05: case detail = hand-drawn card flow (standalone rounded
+                    // white cards + section headers flat on the base color); the native
+                    // List/Section is the old structure (same flaw as the Agents home;
+                    // visual ruling: designed as divider-less cards).
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             if let err = vm.actionError {
@@ -1412,8 +1427,9 @@ struct WorkflowDetailSheet: View {
                                 Text("Tier").font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 8) {
                                     ForEach(Array(steps.enumerated()), id: \.element.id) { idx, st in
-                                        // 先算布尔再传槽——三元内联在 ViewBuilder 里
-                                        // 曾把表达式撑到 type-check 超时。
+                                        // Compute the booleans before passing them into slots — an
+                                        // inline ternary once blew the expression past type-check
+                                        // timeout inside the ViewBuilder.
                                         let isFailed = st.status == "failed"
                                         let isSend = st.kind == "send"
                                         let isAgentStep = st.kind == "agent" || st.kind == "verify"
@@ -1463,21 +1479,21 @@ struct WorkflowDetailSheet: View {
                     DetailSkeleton()
                 }
             }
-            // 插话纠偏（板 11）：语音一等输入 + 可编辑转写 + 错误就地上屏。
+            // Intervene-to-correct (board 11): voice as a first-class input + editable transcript + errors shown in place.
             .sheet(item: $interveneStep) { st in
                 InterveneSheet(vm: vm, step: st)
             }
-            // 跟进单（relates_to 挂靠因果链）。
+            // Follow-up job (relates_to attaches it to the causal chain).
             .sheet(item: $followUpFrom) { w in
                 TaskComposerView(relatesTo: w.id) { newID in
                     Task { await vm.select(newID) }
                 }
             }
-            // 补料 sheet（amend-suggestions 预填候选值）。
+            // Amend-inputs sheet (amend-suggestions prefills candidate values).
             .sheet(item: $amendStep) { st in
                 AmendSheet(vm: vm, step: st)
             }
-            // 办结确认。
+            // Settle confirmation.
             .confirmationDialog(
                 "Settle \(settleTarget?.title ?? "")?",
                 isPresented: Binding(get: { settleTarget != nil }, set: { if !$0 { settleTarget = nil } }),
@@ -1490,7 +1506,7 @@ struct WorkflowDetailSheet: View {
             } message: {
                 Text("Explicit settle for nodes mode; rejected with a reason if steps are in flight")
             }
-            // 取消此步确认。
+            // Cancel-this-step confirmation.
             .confirmationDialog(
                 "Cancel this step?",
                 isPresented: Binding(get: { cancelStepID != nil }, set: { if !$0 { cancelStepID = nil } }),
@@ -1503,7 +1519,7 @@ struct WorkflowDetailSheet: View {
             } message: {
                 Text("Only steps that have not started are eligible; the output is marked + an audit event is written, nothing is deleted")
             }
-            // 补正重发意见。
+            // Amend & resend note.
             .alert("Amend & resend", isPresented: Binding(
                 get: { reworkSendID != nil }, set: { if !$0 { reworkSendID = nil } })) {
                 TextField("What to amend…", text: $reworkSendText)
@@ -1517,7 +1533,7 @@ struct WorkflowDetailSheet: View {
             } message: {
                 Text("The agent amends per your note, then re-enters the send gate")
             }
-            // 重试改指令。
+            // Retry with new instructions.
             .alert("Retry with new instructions", isPresented: Binding(
                 get: { retryPlanID != nil }, set: { if !$0 { retryPlanID = nil } })) {
                 TextField("How should it run this time…", text: $retryPlanText)
@@ -1645,7 +1661,7 @@ struct WorkflowDetailSheet: View {
                 Label("Reject & rework", systemImage: "arrow.uturn.backward")
             }
         }
-        // 定时发送：发送闸门批准时定档（默认明早 09:00，时差礼仪）。
+        // Scheduled send: schedules delivery when approving the send gate (default tomorrow 09:00, timezone courtesy).
         if st.isGate && st.isWaiting,
            (vm.selectedTree?.steps ?? []).contains(where: { $0.kind == "send" && $0.status == "pending" }) {
             Button {
@@ -1654,7 +1670,7 @@ struct WorkflowDetailSheet: View {
                 Label("Scheduled (tomorrow 9:00)", systemImage: "clock.badge.checkmark")
             }
         }
-        // 单步取消：不牵连整单（仅未开跑步合法，服务端校验）。
+        // Cancel one step: does not affect the whole job (only not-yet-started steps are legal; server validates).
         if st.status == "pending" || st.status == "waiting_human" {
             Button(role: .destructive) {
                 cancelStepID = st.id
@@ -1662,7 +1678,7 @@ struct WorkflowDetailSheet: View {
                 Label("Cancel step", systemImage: "minus.circle")
             }
         }
-        // send 守卫拒发后的补正通道。
+        // Correction channel after the send guard refuses.
         if st.status == "failed" && st.kind == "send" {
             Button {
                 reworkSendID = st.id
@@ -1670,7 +1686,7 @@ struct WorkflowDetailSheet: View {
                 Label("Amend & resend", systemImage: "arrowshape.turn.up.right")
             }
         }
-        // 重试并改指令：agent/verify 失败步的干预重试。
+        // Retry with new instructions: corrective retry for failed agent/verify steps.
         if st.status == "failed" && (st.kind == "agent" || st.kind == "verify") {
             Button {
                 retryPlanID = st.id
@@ -1678,7 +1694,7 @@ struct WorkflowDetailSheet: View {
                 Label("Retry with new instructions", systemImage: "square.and.pencil")
             }
         }
-        // 补料：缺 input 的失败步，引擎预填候选值。
+        // Amend inputs: failed steps missing input; the engine prefills candidate values.
         if st.status == "failed" {
             Button {
                 amendStep = st
@@ -1736,8 +1752,9 @@ struct WorkflowDetailSheet: View {
                 Text(FlowStatus.label(w.status))
                     .foregroundStyle(FlowStatus.color(w.status))
                 if let p = w.project { Text("· \(p)") }
-                // per-workflow Prompt 计数（wf_2542c2c7eb13）：Round=Prompt 数
-                // 语义澄清——该单执行期间其会话的 LLM 回合数（非 Workflow 数）。
+                // Per-workflow prompt count (wf_2542c2c7eb13): Round = prompt count
+                // semantics clarified — LLM turns in its session during this job's
+                // execution (not the workflow count).
                 if let ps = vm.selectedTree?.promptStats, ps.count > 0 {
                     Text("· Prompts \(ps.count)")
                         .foregroundStyle(DS.Ink.mintDeep)
@@ -1747,9 +1764,11 @@ struct WorkflowDetailSheet: View {
             }
             .font(DS.mono(12))
             .foregroundStyle(.tertiary)
-            // API 等效价格（wf_535149a174fe）：该单实际使用的模型 × bigmodel
-            // 官方价目——cache/input/output 三价分别计价加总的「走 API 要花
-            // 多少钱」。不在价目的模型（jev/claude 系/已下架）只列名不出价。
+            // API-equivalent price (wf_535149a174fe): models actually used by this
+            // job × the official BigModel price list — cache/input/output priced
+            // separately and summed, i.e. "what it would cost via the API".
+            // Models not in the price list (jev/claude family/delisted) are
+            // named but not priced.
             if let uc = vm.selectedTree?.usageCost, !uc.byModel.isEmpty {
                 HStack(spacing: 6) {
                     Image(systemName: "yensign.circle")
@@ -1797,7 +1816,7 @@ struct WorkflowDetailSheet: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("Open in terminal @\(s)")
                     }
-                    // 单子级免批切换（2026-10-07）：开=立即触发服务端 sweep。
+                    // Per-workflow auto-approve toggle (2026-10-07): turning it on immediately triggers a server sweep.
                     if w.status == "running" || w.status == "queued" || w.status == "waiting_human" {
                         let autoOn = w.auto_approve == true
                         Button {
@@ -1821,7 +1840,7 @@ struct WorkflowDetailSheet: View {
                         .disabled(isTogglingAutoApprove)
                         .accessibilityLabel(autoOn ? "Restore human approval" : "Auto-approve this job (non-send gates)")
                     }
-                    // 终局逃生舱：running 流水随时可强制关闭（在途步全取消）。
+                    // Terminal escape hatch: a running pipeline can be force-closed at any time (all in-flight steps cancelled).
                     if w.status == "running" {
                         Button {
                             settleTarget = w
@@ -1901,7 +1920,7 @@ private struct CaseArtifactsSection: View {
     }
 
     var body: some View {
-        // 板 05：Section 头平铺底色 + 独立白卡（List 形态已随容器重写退役）。
+        // Board 05: section headers flat on the base color + standalone white cards (the List form was retired with the container rewrite).
         VStack(alignment: .leading, spacing: 8) {
             Text("Attachments & outputs · \(artifacts.count)")
                 .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
@@ -2010,7 +2029,7 @@ struct CaseArtifactPreview: View {
     }
 
     private func load() async {
-        // 大附件闸：手机上拉 50MB+ 的 PPTX 既慢也吃内存——劝退到桌面端。
+        // Large-attachment gate: pulling a 50MB+ PPTX on a phone is slow and memory-hungry — steer to desktop.
         if let b = target.bytes, b > 50 * 1024 * 1024 {
             let size = ByteCountFormatter.string(fromByteCount: b, countStyle: .file)
             await MainActor.run { state = .failed("File too large (\(size)) — best viewed on desktop") }
@@ -2054,13 +2073,13 @@ struct CaseArtifactPreview: View {
     /// mime resolution: sniffed bytes win over stored hint; extension map is
     /// the last resort. "octet-stream" from the ledger is a non-answer, not
     /// a fact — it must never block a sniffable file.
-    // MARK: 文档预览 helpers（PDF / QuickLook）
+    // MARK: Document preview helpers (PDF / QuickLook)
 
     static func ext(_ name: String) -> String {
         (name as NSString).pathExtension.lowercased()
     }
 
-    /// QuickLook 处理的办公格式（只读渲染，系统级保真度）。
+    /// Office formats QuickLook handles (read-only rendering, system-level fidelity).
     static let officeExtensions: Set<String> = [
         "docx", "doc", "xlsx", "xls", "pptx", "ppt", "rtf", "odt", "ods", "odp", "pages", "numbers", "key",
     ]
@@ -2072,7 +2091,7 @@ struct CaseArtifactPreview: View {
             || mime.contains("opendocument")
     }
 
-    /// 无扩展名时按 mime 推一个（QuickLook/PDFKit 都靠扩展名认文件）。
+    /// Derive one from the mime type when the extension is missing (QuickLook/PDFKit both identify files by extension).
     static func officeExt(mime: String) -> String {
         if mime.contains("wordprocessing") || mime.contains("msword") { return "docx" }
         if mime.contains("spreadsheet") || mime.contains("ms-excel") { return "xlsx" }
@@ -2080,7 +2099,7 @@ struct CaseArtifactPreview: View {
         return "bin"
     }
 
-    /// 落临时文件（扩展名保真，渲染器靠它认格式）。
+    /// Write to a temp file (extension preserved; renderers identify the format by it).
     static func localFile(data: Data, name: String, fallbackExt: String) throws -> URL {
         var n = name
         if ext(n).isEmpty { n += "." + fallbackExt }
@@ -2167,8 +2186,10 @@ private struct StepTimelineRow: View {
     let onRetry: () -> Void
     var onTerminal: ((String) -> Void)? = nil
     var showConnector = true
-    // 守卫拒绝≠死路（2026-09-20 wf_fb099d0e9f11 事故）：修复动作从长按菜单
-    // 钉到卡面——长按里藏的入口等于不存在（自家 UX 纪律）。
+    // A guard refusal is not a dead end (2026-09-20 wf_fb099d0e9f11 incident):
+    // repair actions were pinned from the long-press menu onto the card face —
+    // an entry hidden in a long-press effectively does not exist (our own UX
+    // discipline).
     var onReworkSend: (() -> Void)? = nil
     var onRetryPlan: (() -> Void)? = nil
     var onAmend: (() -> Void)? = nil
@@ -2249,9 +2270,11 @@ private struct StepTimelineRow: View {
                         .foregroundStyle(DS.Ink.rose)
                         .lineLimit(4)
                 }
-                // 守卫拒绝≠死路（2026-09-20 wf_fb099d0e9f11 事故）：修复动作
-                // 就地可点——send→补正重发；agent/verify→重试并改指令；其余
-                // 失败→补料。原样重试永远在最后（对 send 多半会再撞同一守卫）。
+                // A guard refusal is not a dead end (2026-09-20 wf_fb099d0e9f11
+                // incident): repair actions are tappable in place — send → amend
+                // & resend; agent/verify → retry with new instructions; other
+                // failures → amend inputs. Retry as-is is always last (for send
+                // it would most likely hit the same guard again).
                 if step.status == "failed" {
                     HStack(spacing: 8) {
                         if step.kind == "send", let onReworkSend {
@@ -2272,7 +2295,7 @@ private struct StepTimelineRow: View {
                     }
                     .padding(.top, 2)
                 }
-                // 发送回执：发给谁、何时、随信附件——send 完成的可见终点。
+                // Send receipt: to whom, when, and which attachments went along — the visible end state of a completed send.
                 if let receipt = step.sendReceipt {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
@@ -2289,7 +2312,7 @@ private struct StepTimelineRow: View {
                                 .foregroundStyle(.tertiary)
                         }
                         if !receipt.attachments.isEmpty {
-                            Text("Attachments: \(receipt.attachments.joined(separator: "、"))")
+                            Text("Attachments: \(receipt.attachments.joined(separator: ", "))")
                                 .font(DS.mono(10))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(3)
@@ -2320,7 +2343,7 @@ private struct StepTimelineRow: View {
     }
 }
 
-// MARK: - 骨架加载（板 13）：灰条呼吸，不空白
+// MARK: - Skeleton loading (board 13): breathing gray bars, never blank
 struct SkeletonBar: View {
     var width: CGFloat? = nil
     @State private var phase = false
@@ -2358,14 +2381,19 @@ struct DetailSkeleton: View {
     }
 }
 
-// MARK: - 链路卡（板F · 2026-09-20 apply，部分要素二期）
-// 点开案卷看到它在 mesh 里走的路：四跳（来信→公司→业务→会话），数据来自
-// 引擎进件时落的平铺 meta 键（route_chain/company/domain/session/reasons）——
-// 判定只在引擎做一次，这里纯投影。老单没有这些键就不渲染（不猜）。
-// 板F 落地：每跳判断原因行（route_reasons 按 \n 拆，引擎 ≥2026-09-20 才写）、
-// 落回琥珀态（实际落点 w.session ≠ 判定落点 route_session 时终点跳琥珀底
-// + ⚠「落回」，标题旁「⚠ 已落回」徽标）、底部 route_decision 原文可展开。
-// 未落地（二期）：逐跳时间戳（events 里有，链路卡暂不排）；web 桌面右栏见板H。
+// MARK: - Route chain card (board F · applied 2026-09-20, some elements in phase 2)
+// Opening a case shows the path it took through the mesh: four hops
+// (inbound → company → domain → session). Data comes from flat meta keys the
+// engine writes at intake (route_chain/company/domain/session/reasons) — the
+// decision is made once in the engine; this is a pure projection. Older jobs
+// without these keys render nothing (no guessing).
+// Board F landed: per-hop decision reason lines (route_reasons split on \n,
+// written by engine ≥2026-09-20), the fallback amber state (when the resolved
+// target session w.session ≠ the judged target route_session, the final hop
+// gets an amber background + ⚠ "fallback", plus a "⚠ fell back" badge next to
+// the title), and the raw route_decision expandable at the bottom.
+// Not landed (phase 2): per-hop timestamps (they exist in events, not yet
+// scheduled for the route card); the desktop web right rail is board H.
 private struct RouteChainCard: View {
     let w: LifecycleWorkflow
 
@@ -2374,8 +2402,9 @@ private struct RouteChainCard: View {
         return c.split(separator: ">").map(String.init)
     }
 
-    /// 每跳判定原因（板F）：route_reasons 按 \n 拆四条，与 chain 同序。
-    /// 键缺失（老单）或条数对不上就不渲染原因行（不猜）。
+    /// Per-hop decision reasons (board F): route_reasons split on \n into four
+    /// lines, same order as the chain. If the key is missing (old jobs) or the
+    /// count does not match, no reason lines render (no guessing).
     private var reasons: [String]? {
         guard let r = w.meta?["route_reasons"]?.stringValue, !r.isEmpty else { return nil }
         let lines = r.components(separatedBy: "\n")
@@ -2383,8 +2412,10 @@ private struct RouteChainCard: View {
         return lines
     }
 
-    /// 落回态：实际落点（w.session，引擎 resolveSession 改道后的真落点）
-    /// ≠ 进件判定落点（route_session）。判定键缺失或实际落点未知时不宣称落回。
+    /// Fallback state: the resolved target session (w.session, where the engine's
+    /// resolveSession actually redirected) ≠ the intake-judged target
+    /// (route_session). No fallback claim when the judged key is missing or the
+    /// actual target is unknown.
     private var fallback: Bool {
         guard let judged = w.meta?["route_session"]?.stringValue, !judged.isEmpty,
               let actual = w.session, !actual.isEmpty else { return false }
@@ -2393,7 +2424,7 @@ private struct RouteChainCard: View {
 
     var body: some View {
         if let chain, chain.count == 4 {
-            // 空串不是 nil——?.stringValue ?? "—" 对空域会渲染空行（P2⑦）。
+            // Empty string is not nil — `?.stringValue ?? "—"` would render a blank line for empty fields (P2⑦).
             let or = { (v: String?) -> String in (v?.isEmpty ?? true) ? "—" : v! }
             let company = or(w.meta?["route_company"]?.stringValue)
             let domain = or(w.meta?["route_domain"]?.stringValue)
@@ -2405,7 +2436,7 @@ private struct RouteChainCard: View {
                         .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
                     Spacer()
                     if fallback {
-                        // 板F 落回徽标：终点跳被引擎改道时在标题旁点名。
+                        // Board F fallback badge: called out next to the title when the engine redirected the final hop.
                         HStack(spacing: 3) {
                             Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 9))
                             Text("fell back")
@@ -2420,8 +2451,10 @@ private struct RouteChainCard: View {
                     hopConnector
                     routeHop(icon: "diamond.fill", title: "Domain", value: domain, hot: true, reason: reasons?[2])
                     hopConnector
-                    // 终点跳：橙底收尾——一眼看到本单落进哪个会话；
-                    // 落回时改琥珀底 + ⚠「落回」，实落会话盖过判定会话（板F）。
+                    // Final hop: mint background to close — see at a glance which
+                    // session this job landed in; on fallback it turns amber + ⚠
+                    // "fallback", and the actual session overrides the judged one
+                    // (board F).
                     HStack(spacing: 9) {
                         Image(systemName: "play.fill").font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white)
@@ -2451,8 +2484,9 @@ private struct RouteChainCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: DS.R.btn, style: .continuous))
                 }
                 if let reasons {
-                    // route_decision 原文（板F「可展开」）：链路 + 四条原因，
-                    // 纯投影已落账的 meta，不再二次请求。
+                    // Raw route_decision (board F "expandable"): chain + four reason
+                    // lines, a pure projection of meta already on the ledger — no
+                    // second request.
                     DisclosureGroup("route_decision · raw") {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(chain.joined(separator: " → "))

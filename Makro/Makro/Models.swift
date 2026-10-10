@@ -51,8 +51,9 @@ struct ChatMessage: Identifiable, Equatable {
     let role: Role
     var text: String
     let timestamp: Date
-    /// 随消息发送的附件（wf_3310501a9fe4）。本地渲染用 name/mime；重开
-    /// transcript 后无缩略图数据，显示占位 chip（原图在服务端常驻）。
+    /// Attachments sent with a message (wf_3310501a9fe4). name/mime drive
+    /// local rendering; after reopening the transcript there is no thumbnail
+    /// data, so a placeholder chip shows (the original lives on the server).
     var attachments: [ChatAttachment]?
 
     init(id: UUID = UUID(), role: Role, text: String, timestamp: Date = Date(), attachments: [ChatAttachment]? = nil) {
@@ -64,8 +65,9 @@ struct ChatMessage: Identifiable, Equatable {
     }
 }
 
-/// Chat 附件元数据（wf_3310501a9fe4）：上传后由服务端回填 id/path；
-/// thumbnail 仅待发托盘/刚发送的气泡持有（不持久化，transcript 只存元数据）。
+/// Chat attachment metadata (wf_3310501a9fe4): id/path are filled in by the
+/// server after upload; the thumbnail exists only in the pending tray / the
+/// just-sent bubble (not persisted — the transcript stores metadata only).
 struct ChatAttachment: Codable, Equatable, Identifiable {
     let id: String
     let name: String
@@ -76,14 +78,17 @@ struct ChatAttachment: Codable, Equatable, Identifiable {
     enum CodingKeys: String, CodingKey { case id, name, mime, bytes, path }
 }
 
-// 开单对话收敛出的计划（09-29）：等用户确认的 brief 预览卡。经 `plan` WS
-// 事件下发；确认/取消走 /api/chat/intake/confirm|deny——服务端 startTask
-// 正门开单，对话本身不执行任何东西。0930 起带落点（路由层判定，计划卡
-// 显示；pinnedSession=用户对话中钉住的转述）。
+// The plan converged from the intake chat (09-29): a brief preview card
+// awaiting user confirmation. Delivered via the `plan` WS event;
+// confirm/cancel go through /api/chat/intake/confirm|deny — the server's
+// startTask front door dispatches the job; the conversation itself executes
+// nothing. Since 0930 it carries the resolved target session (judged by the
+// routing layer, shown on the plan card; pinnedSession = the session the user
+// pinned during the chat).
 struct PendingPlan: Codable, Equatable {
-    let title: String    // 一句话标题（开单后的 workflow title）
-    let summary: String  // 一句话概述
-    let brief: String    // 完整 brief（背景/要做什么/产出/时限等已确认事实）
+    let title: String    // one-line title (the workflow title after intake)
+    let summary: String  // one-line summary
+    let brief: String    // full brief (background / what to do / outputs / deadlines and other confirmed facts)
     let pinnedSession: String?
     let landing: Landing?
 
@@ -118,8 +123,9 @@ struct Artifact: Codable, Identifiable, Equatable {
     var isHTML: Bool { type == "html" }
     var isVideo: Bool { type == "video" }
 
-    // 多格式富文本查看（wf_b93d083f6682，2026-10-05）：按文件后缀判定，
-    // 不依赖服务端 type（服务端 md/json 都归 text/plain，区分不了）。
+    // Multi-format rich-text viewing (wf_b93d083f6682, 2026-10-05): decided
+    // by file extension, not the server-side type (the server files both md
+    // and json under text/plain and cannot distinguish them).
     private var lowerName: String { name.lowercased() }
     var isMarkdown: Bool { lowerName.hasSuffix(".md") || lowerName.hasSuffix(".markdown") }
     var isJSON: Bool { lowerName.hasSuffix(".json") }
@@ -136,8 +142,9 @@ struct Artifact: Codable, Identifiable, Equatable {
             .contains { lowerName.hasSuffix($0) }
     }
 
-    // 所属单（wf_1bc08ecd4184，方案 A 服务端 join）：卡片芯片与预览页「所属单」
-    // 横幅的数据源——legacy makro 文件无此键，解码为 nil 容错。
+    // Owning job (wf_1bc08ecd4184, option A server-side join): data source
+    // for the card chip and the preview page's "owning job" banner — legacy
+    // makro files lack this key; decodes as nil for tolerance.
     var workflow: ArtifactWorkflowRef? { _workflow }
     private var _workflow: ArtifactWorkflowRef?
 
@@ -167,7 +174,7 @@ struct Artifact: Codable, Identifiable, Equatable {
     }
 }
 
-/// Artifact 的所属单摘要（服务端 /api/artifacts join 附带，wf_1bc08ecd4184）。
+/// Owning-job summary for an artifact (attached by the /api/artifacts join, wf_1bc08ecd4184).
 struct ArtifactWorkflowRef: Codable, Equatable {
     let id: String
     let title: String
@@ -187,7 +194,7 @@ struct LifecycleWorkflow: Codable, Identifiable, Equatable {
     let updated_at: String
     var prompt_count: Int?
     var waiting_steps: Int?
-    /// 单子级免批（2026-10-07）：true=非发送闸门自动批准（服务端一等字段）。
+    /// Per-workflow auto-approve (2026-10-07): true = non-send gates approved automatically (a first-class server-side field).
     var auto_approve: Bool?
     /// Raw workflow meta (assigned_session lives here — the human's routing
     /// decision for the case). Values decode tolerantly: non-strings become
@@ -241,8 +248,10 @@ struct LifecycleStep: Codable, Identifiable, Equatable {
     var input: [String: JSONValue]?
     var output: [String: JSONValue]?
     let updated_at: String
-    /// 节点时序真数据（离开 pending / 到达终态的首次时刻）；未开跑时
-    /// 服务端省略字段。created_at 沿用旧口径（=updated_at），勿用作开始时间。
+    /// Real node timing data (first moment leaving pending / reaching a
+    /// terminal state); the server omits the fields when not yet started.
+    /// created_at keeps the old convention (= updated_at) — do not use it as
+    /// the start time.
     var started_at: String?
     var completed_at: String?
     var summary: String?
@@ -251,7 +260,7 @@ struct LifecycleStep: Codable, Identifiable, Equatable {
     var isWaiting: Bool { status == "waiting_human" }
     var displayTitle: String { title ?? kind }
 
-    /// 紧凑耗时：到终态→"Xm"；在途→"Xm…"；未开跑→nil。
+    /// Compact duration: terminal → "Xm"; in flight → "Xm…"; not started → nil.
     var timingLabel: String? {
         guard let start = started_at.flatMap(MakroISO.date(from:)) else { return nil }
         let end = completed_at.flatMap(MakroISO.date(from:)) ?? Date()
@@ -286,11 +295,13 @@ struct GateQueueItem: Codable, Identifiable, Equatable {
 struct LifecycleWorkflowTree: Codable, Equatable {
     let workflow: LifecycleWorkflow
     var steps: [LifecycleStep]?
-    /// 该单窗口内其会话的 claude_code 回合聚合（wf_2542c2c7eb13：
-    /// Round 语义澄清=Prompt 数而非 Workflow 数）。旧引擎不返回则解码 nil。
+    /// claude_code turn aggregation for its session within this job's window
+    /// (wf_2542c2c7eb13: Round semantics clarified = prompt count, not
+    /// workflow count). Old engines do not return it; decodes nil.
     var promptStats: PromptStats?
-    /// API 等效价格（wf_535149a174fe）：同窗口用量代入智谱 bigmodel 价目。
-    /// 旧引擎不返回则解码 nil。
+    /// API-equivalent price (wf_535149a174fe): usage in the same window
+    /// priced against the Zhipu BigModel price list. Old engines do not
+    /// return it; decodes nil.
     var usageCost: UsageCost?
 }
 
@@ -300,9 +311,10 @@ struct PromptStats: Codable, Equatable {
     let outputTokens: Double
 }
 
-/// 「这单走 API 要花多少钱」：cache/input/output 三价分别计价加总
-/// （元；cached 是 input 子集——cache 价 × cached + input 价 × 差额）。
-/// 不在价目内的模型 priced=false：只显用量，绝不猜价。
+/// "What this job would cost via the API": cache/input/output priced
+/// separately and summed (CNY; cached is a subset of input — cache rate ×
+/// cached + input rate × the difference). Models not in the price list get
+/// priced=false: usage only, never a guessed price.
 struct UsageCost: Codable, Equatable {
     struct Cost: Codable, Equatable {
         let cache: Double
@@ -311,12 +323,12 @@ struct UsageCost: Codable, Equatable {
         let total: Double
     }
     struct ModelCost: Codable, Equatable {
-        let model: String      // 账本原样名（对账用）
-        let label: String      // 价目展示名
+        let model: String      // name as written in the ledger (for reconciliation)
+        let label: String      // price-list display name
         let free: Bool
         let priced: Bool
         let calls: Int
-        let inputTokens: Double   // 含缓存（展示口径同 promptStats）
+        let inputTokens: Double   // cache included (same display basis as promptStats)
         let cachedTokens: Double
         let inputTokensChargeable: Double
         let outputTokens: Double
@@ -332,9 +344,11 @@ struct UsageCost: Codable, Equatable {
     let unpricedModels: [String]?
 }
 
-/// 费用分析聚合（wf_6a74fc4a23e4，GET /api/lifecycle/cost-stats）：范围内
-/// workflows 逐单复用详情 usageCost 口径后的 Flow 层聚合。分桶右开区间
-///（[0,5)[5,20)[20,50)[50,100)[100,200)[200+)，服务端单一定义）。
+/// Cost analysis aggregation (wf_6a74fc4a23e4, GET
+/// /api/lifecycle/cost-stats): a Flow-level aggregation over the in-scope
+/// workflows, reusing the per-job detail usageCost basis. Buckets are
+/// right-open intervals ([0,5)[5,20)[20,50)[50,100)[100,200)[200+), defined
+/// once on the server).
 struct CostStats: Codable, Equatable {
     struct Overall: Codable, Equatable {
         let workflows: Int
@@ -354,7 +368,7 @@ struct CostStats: Codable, Equatable {
     }
     struct Bucket: Codable, Equatable {
         let label: String
-        let edges: [Double?]   // [lo, hi]；hi=nil 表示 ¥lo+ 开口桶
+        let edges: [Double?]   // [lo, hi]; hi=nil means the open ¥lo+ bucket
         let count: Int
         let totalCny: Double
         let byModel: [BucketModel]
@@ -518,13 +532,13 @@ extension LifecycleStep {
         }
     }
 
-    /// 内联正文（body_source:inline 的邮件稿）。
+    /// Inline body (the email draft for body_source:inline).
     var bodyInline: String? {
         guard let b = input?["body"]?.stringValue, !b.isEmpty else { return nil }
         return b
     }
 
-    /// 正文契约路径：body_ref → 工件按 id 取字节、按哈希核验。
+    /// Body contract path: body_ref → fetch artifact bytes by id, verify by hash.
     var bodyRef: (id: String, name: String)? {
         guard let d = input?["body_ref"]?.dictValue,
               let id = d["id"]?.stringValue, !id.isEmpty else { return nil }
@@ -539,7 +553,7 @@ extension LifecycleStep {
 
     /// The tmux session this step runs in: seeded into agent/verify input by
     /// gate approve; falls back to the workflow's session / assigned_session.
-    /// 发送回执（send 步 output：to/sent_at + 随信附件清单）。
+    /// Send receipt (send step output: to/sent_at + the attachment list that went along).
     var sendReceipt: (to: String, sentAt: String?, attachments: [String])? {
         guard kind == "send", status == "completed",
               let to = output?["to"]?.stringValue, !to.isEmpty else { return nil }
@@ -549,9 +563,10 @@ extension LifecycleStep {
         return (to, output?["sent_at"]?.stringValue, atts)
     }
 
-    /// 无契约 fallback 正文：body_ref/deliverables 都缺席时，正文可能只
-    /// 以 output.body / output.draft / output.output 内联存在——审批卡的
-    /// 最后防线，保证"点 OK 前看得到内容"永远有东西可看。
+    /// Contract-less fallback body: when body_ref/deliverables are both
+    /// absent, the body may exist only inline in output.body / output.draft /
+    /// output.output — the approval card's last line of defense, guaranteeing
+    /// there is always something to read before tapping OK.
     var fallbackBody: String? {
         for key in ["body", "draft", "output"] {
             if let v = output?[key]?.stringValue, v.count > 40 { return v }
@@ -570,10 +585,13 @@ extension LifecycleStep {
     }
 }
 
-// ── 技能目录（GET /api/skills，2026-10-02 追溯一期）─────────────────────────
-// 家族/用途/分发健康（sync-skills 四落点）+ skill_used 账本事件的用量聚合。
-// uses=0 是真实口径（无事件不伪造）；resident=常驻类（宪法每任务卡必载，
-// 调用量恒=全量、无信息量，单列避免淹没按需类的频次）。
+// ── Skills catalog (GET /api/skills, 2026-10-02 retrospective phase 1) ─────────
+// Family/purpose/dispatch health (the four sync-skills targets) + usage
+// aggregation from skill_used ledger events. uses=0 is the truthful figure
+// (no events, no fabrication); resident = always-loaded class (the
+// constitution mandates them on every task card, so their call count is
+// always the full volume and carries no signal — listed separately to avoid
+// drowning out the on-demand frequencies).
 
 struct SkillInfo: Codable, Identifiable, Equatable {
     let name: String
@@ -601,21 +619,21 @@ struct SkillSessionUse: Codable, Equatable {
     let count: Int
 }
 
-// MARK: - Dashboard（wf_e86d52c97b51，GET /api/stats/dashboard）
+// MARK: - Dashboard (wf_e86d52c97b51, GET /api/stats/dashboard)
 
 struct DashboardStats: Codable, Equatable {
     struct TokenDay: Codable, Equatable {
         let day: String
         let inputTokens: Double
         let outputTokens: Double
-        /// z.ai 口径（wf_5160b09e18d2）：缓存命中 token——命中率趋势图数据源。
+        /// z.ai basis (wf_5160b09e18d2): cache-hit tokens — data source for the hit-rate trend chart.
         let cachedTokens: Double?
         let calls: Int
     }
     struct TokenToday: Codable, Equatable {
         let inputTokens: Double
         let outputTokens: Double
-        /// z.ai 口径（wf_66a9b632154d）：缓存命中 token（input 子集）；旧端点缺键 nil。
+        /// z.ai basis (wf_66a9b632154d): cache-hit tokens (a subset of input); nil when the old endpoint lacks the key.
         let cachedTokens: Double?
         let calls: Int
     }
@@ -644,8 +662,10 @@ struct DashboardStats: Codable, Equatable {
         let byDay: [WorkflowDay]
         let byStatus: [WorkflowStatusCount]
     }
-    /// 归属率（2026-10-06 web 统计视图替代时新增）：账本全量 vs 单子归属量
-    /// （每单 会话×agent 步窗口 的 claude_code 回合）。旧端点缺键 nil。
+    /// Attribution rate (added 2026-10-06 with the web stats-view
+    /// replacement): full ledger volume vs job-attributed volume (claude_code
+    /// turns in each job's session × agent-step window). nil when the old
+    /// endpoint lacks the key.
     struct Attribution: Codable, Equatable {
         struct Quant: Codable, Equatable {
             let calls: Int
@@ -668,7 +688,7 @@ struct DashboardStats: Codable, Equatable {
     let attribution: Attribution?
 }
 
-// GET /api/usage/stats（模型分布饼图）
+// GET /api/usage/stats (model distribution pie chart)
 struct UsageByModel: Codable, Equatable {
     struct ModelUsage: Codable, Equatable {
         let model: String

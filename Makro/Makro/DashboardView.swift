@@ -1,11 +1,14 @@
 import SwiftUI
 import Charts
 
-// Flow 侧 Dashboard（wf_e86d52c97b51，依据 wf_eadd5e140c06 调研设计）：
-// A 三指标卡（今日 Token/今日 Workflow/总 Workflow，自然日口径+环比昨日）
-// B 时段切换（7/30 天）→ C Token 趋势面积图（输入含 cache 桶/输出分层）
-// D Workflow 按日条形 → E 分布（模型饼图 + 状态环形）→ F Skill Top10 →
-// G 口径脚注。入口=Flow 页 toolbar（push，不加 tab——调研 IA 裁决）。
+// Flow-side Dashboard (wf_e86d52c97b51, designed from the wf_eadd5e140c06
+// research):
+// A three metric cards (tokens today / workflows today / total workflows,
+// calendar-day basis + vs-yesterday) B period switch (7/30 days) → C token
+// trend area chart (input incl. cache bucket / output layered) D workflows
+// per-day bars → E distribution (model pie + status ring) → F Skill Top10 →
+// G basis footnote. Entry = the Flow page toolbar (push, no extra tab — the
+// research IA ruling).
 struct DashboardView: View {
     @State private var stats: DashboardStats?
     @State private var usage: UsageByModel?
@@ -24,14 +27,14 @@ struct DashboardView: View {
                 }
                 if let s = stats {
                     metricRow(s)
-                    if let attr = s.attribution { attributionStrip(attr) } // web 统计视图替代时新增
+                    if let attr = s.attribution { attributionStrip(attr) } // added when the web stats view was replaced
                     Picker("Period", selection: $days) {
                         Text("7d").tag(7)
                         Text("30d").tag(30)
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: days) { _ in Task { await load() } }
-                    cacheRateTrend(s) // wf_5160b09e18d2：命中率趋势紧跟指标行
+                    cacheRateTrend(s) // wf_5160b09e18d2: the hit-rate trend right under the metric row
                     tokenTrend(s)
                     workflowTrend(s)
                     if let u = usage { distRow(s, u) }
@@ -62,7 +65,7 @@ struct DashboardView: View {
         } catch {
             loadError = "Stats failed to load: \(error.localizedDescription)"
         }
-        // 模型分布与 Skill Top 与时段无关，首次拉一次即可。
+        // Model distribution and Skill Top are period-independent; one initial pull is enough.
         if usage == nil, let u = try? await APIClient.shared.fetchUsageStats(hours: 24 * days) {
             usage = u
         }
@@ -71,12 +74,13 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - A 指标卡
+    // MARK: - A metric cards
 
     private func metricRow(_ s: DashboardStats) -> some View {
         HStack(spacing: 10) {
-            // 第一卡（wf_66a9b632154d）：缓存命中率进第一行——z.ai 计费核对
-            // 的第一眼指标（cached/input；input=0 不显）。
+            // First card (wf_66a9b632154d): the cache hit rate joins the
+            // first row — the at-a-glance metric for z.ai bill reconciliation
+            // (cached/input; hidden when input=0).
             metricCard(title: "Tokens today", value: fmtTokens(s.tokens.today.inputTokens + s.tokens.today.outputTokens),
                        cacheRate: cacheRateLabel(s),
                        sub: subLine(in: s.tokens.today.inputTokens, out: s.tokens.today.outputTokens,
@@ -93,9 +97,11 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - A2 归属率（2026-10-06 web 统计视图替代时新增）：账本全量 vs
-    // 单子归属量——纯单子视图的纠偏锚（总量含引擎 llm 行、无归属 CC 回合、
-    // chat 等不挂单消耗）。
+    // MARK: - A2 attribution rate (added 2026-10-06 with the web stats-view
+    // replacement): full ledger volume vs job-attributed volume — the
+    // correction anchor for a jobs-only view (the total includes engine llm
+    // lines, unattributed CC turns, chat and other consumption that hangs on
+    // no job).
     private func attributionStrip(_ a: DashboardStats.Attribution) -> some View {
         let pct = a.ledger.inputTokens > 0 ? a.inputRate * 100 : 0
         return chartCard(title: "Attribution · last \(days) days") {
@@ -122,11 +128,11 @@ struct DashboardView: View {
         }
     }
 
-    /// z.ai 口径缓存命中率（wf_66a9b632154d）：cached_tokens / input_tokens。
+    /// z.ai-basis cache hit rate (wf_66a9b632154d): cached_tokens / input_tokens.
     private func cacheRateLabel(_ s: DashboardStats) -> String? {
         let inp = s.tokens.today.inputTokens
         guard inp > 0 else { return nil }
-        return String(format: "%.1f%%", (s.tokens.today.cachedTokens ?? 0) / inp * 100) // wf_5160b09e18d2：去文字标签防窄屏截断
+        return String(format: "%.1f%%", (s.tokens.today.cachedTokens ?? 0) / inp * 100) // wf_5160b09e18d2: drop the text label to avoid narrow-screen truncation
     }
 
     private func metricCard(title: String, value: String, cacheRate: String? = nil, sub: String) -> some View {
@@ -162,7 +168,7 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - C0 缓存命中率趋势（wf_5160b09e18d2）：按日 cached/input（%）。
+    // MARK: - C0 cache hit-rate trend (wf_5160b09e18d2): daily cached/input (%).
     private func cacheRateTrend(_ s: DashboardStats) -> some View {
         chartCard(title: "Cache hit-rate trend") {
             Chart(s.tokens.byDay, id: \.day) { d in
@@ -184,7 +190,7 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - C Token 趋势（输入/输出分层面积）
+    // MARK: - C Token trend (input/output layered area)
 
     private func tokenTrend(_ s: DashboardStats) -> some View {
         chartCard(title: "Token usage trend") {
@@ -200,7 +206,7 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - D Workflow 趋势
+    // MARK: - D Workflow trend
 
     private func workflowTrend(_ s: DashboardStats) -> some View {
         chartCard(title: "Job trend") {
@@ -212,7 +218,7 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - E 分布（模型饼 + 状态环形）
+    // MARK: - E Distribution (model pie + status ring)
 
     private func distRow(_ s: DashboardStats, _ u: UsageByModel) -> some View {
         HStack(alignment: .top, spacing: 10) {
@@ -256,7 +262,7 @@ struct DashboardView: View {
         })
     }
 
-    // MARK: - G 脚注
+    // MARK: - G Footnote
 
     private var footnote: some View {
         Text("Basis: today = calendar day (local timezone); token input includes the cache-hit bucket (ledger-consistent); skill counts accumulate since the 2026-10-04 fix.")
@@ -280,7 +286,7 @@ struct DashboardView: View {
     }
 
     private func dayStr(_ ymd: String) -> String {
-        // "2026-10-04" → "10-04"（横轴留短）
+        // "2026-10-04" → "10-04" (keep the axis labels short)
         String(ymd.suffix(5))
     }
 
