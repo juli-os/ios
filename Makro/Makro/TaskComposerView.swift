@@ -1,18 +1,15 @@
 import SwiftUI
 
-// Intake · voice-first (Penpot board 10 · makro-iphone).
-// Typing is too costly — voice is the first-class input: a big mic,
-// tap-to-start/stop, Azure transcription (the project's existing
-// AzureSpeechManager, already configured in Settings), editable transcript,
-// and typing always available. The title auto-takes the first sentence.
-// Submit = POST /api/lifecycle/tasks (same contract as the web #/trigger;
-// dispatch takes over immediately); on success the new case detail opens
-// automatically.
+// 发单 · 语音优先（Penpot 板 10 · makro-iphone）。
+// 手打成本太高——语音是一等输入：大 mic 点按开始/结束，Azure 转写
+// （工程内既有 AzureSpeechManager，设置里已配），转写结果可编辑，
+// 手打永远可用。标题自动取首句。发起 = POST /api/lifecycle/tasks
+// （与 web #/trigger 同契约，发单即接手），成功后自动打开新案卷详情。
 
 struct TaskComposerView: View {
-    /// Submit succeeded → hand the new case id back; the caller opens the detail.
+    /// 发起成功 → 回传新案卷 id，调用方打开详情。
     let onStarted: (String) -> Void
-    /// Follow-up attachment: points at an existing case (enters the causal chain on the ledger).
+    /// 跟进单挂靠：指向既有案卷（因果链入账）。
     var relatesTo: String? = nil
     @Environment(\.dismiss) private var dismiss
 
@@ -39,32 +36,32 @@ struct TaskComposerView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if let relatesTo, !relatesTo.isEmpty {
-                        Label("Follows \(relatesTo.prefix(14))… (causal chain in the ledger)", systemImage: "arrow.triangle.branch")
+                        Label("跟进自 \(relatesTo.prefix(14))…（因果链入账）", systemImage: "arrow.triangle.branch")
                             .font(DS.mono(10, .semibold))
                             .foregroundStyle(DS.Ink.mintDeep)
                             .padding(.horizontal, 8).padding(.vertical, 4)
                             .background(DS.Ink.mint.opacity(0.1))
                             .clipShape(Capsule())
                     }
-                    // Title: auto-generated from the first sentence, editable
-                    Text("Title · auto-generated, editable")
+                    // 标题：首句自动生成，可改
+                    Text("标题 · 首句自动生成，可改")
                         .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
-                    TextField("Name this job…", text: $title, onEditingChanged: { titleEdited = $0 })
+                    TextField("给这单起个名字…", text: $title, onEditingChanged: { titleEdited = $0 })
                         .font(DS.text(14, .semibold))
                         .padding(.horizontal, 12).padding(.vertical, 10)
                         .background(DS.Canvas.card)
                         .clipShape(RoundedRectangle(cornerRadius: DS.R.md, style: .continuous))
 
-                    // Transcript body
-                    Text("Content · voice transcript, tap to edit")
+                    // 转写正文
+                    Text("内容 · 语音转写结果，点文字可修")
                         .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 6) {
                             Circle().fill(transcript.isEmpty ? DS.Ink.zinc : DS.Ink.done)
                                 .frame(width: 7, height: 7)
                             Text(transcript.isEmpty
-                                 ? (isListening ? "Listening…" : "Tap the mic below to start")
-                                 : "✓ Transcribed · \(charCount) chars")
+                                 ? (isListening ? "正在听…" : "点下方麦克风开始说")
+                                 : "✓ 转写完成 · \(charCount) 字")
                                 .font(DS.mono(10)).foregroundStyle(.secondary)
                             Spacer()
                             if isListening, case .listening(let partial) = speech.listenState, !partial.isEmpty {
@@ -80,43 +77,43 @@ struct TaskComposerView: View {
                             .padding(8)
                             .background(DS.Canvas.card)
                             .clipShape(RoundedRectangle(cornerRadius: DS.R.md, style: .continuous))
-                        Text("Transcription: Azure Speech (configured in Settings)")
+                        Text("转写：Azure Speech（设置里已配）")
                             .font(DS.mono(9)).foregroundStyle(Color.secondary.opacity(0.6))
                     }
 
                     if let micError {
-                        ErrorLine(text: micError + " · typing still works")
+                        ErrorLine(text: micError + " · 手打仍可用")
                     }
                     if let errorText {
                         ErrorLine(text: errorText)
                     }
 
-                    // "dispatch takes over" hint
+                    // 发单即接手提示
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle").font(.system(size: 12))
-                        Text("Handed off on create · first node seeded · stops at the gate for you")
+                        Text("发单即接手 · 首节点自动播种 · 到闸门会停下来等你")
                     }
                     .font(DS.mono(10)).foregroundStyle(DS.Ink.mintDeep)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(red: 1.0, green: 0.973, blue: 0.941)) // #FFF8F0 warm orange-white
+                    .background(Color(red: 1.0, green: 0.973, blue: 0.941)) // #FFF8F0 暖橘白
                     .clipShape(RoundedRectangle(cornerRadius: DS.R.md))
                 }
                 .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 180)
             }
             .background(DS.Canvas.app.ignoresSafeArea())
             .safeAreaInset(edge: .bottom) { micBar }
-            .navigationTitle("Create job")
+            .navigationTitle("发单")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { stopMic(); dismiss() }
+                    Button("取消") { stopMic(); dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         submit()
                     } label: {
-                        if submitting { ProgressView().controlSize(.small) } else { Text("Go →") }
+                        if submitting { ProgressView().controlSize(.small) } else { Text("发起 →") }
                     }
                     .font(DS.text(14, .semibold))
                     .disabled(submitting || title.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -129,7 +126,7 @@ struct TaskComposerView: View {
         }
     }
 
-    // ── Bottom voice bar: waveform + big mic ──
+    // ── 底部语音条：波形 + 大 mic ──
     private var micBar: some View {
         VStack(spacing: 10) {
             if isListening {
@@ -138,16 +135,16 @@ struct TaskComposerView: View {
                         Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
-                    .accessibilityLabel("Cancel recording")
+                    .accessibilityLabel("取消录音")
                     Text(elapsedLabel).font(DS.mono(12, .semibold)).foregroundStyle(DS.Ink.mintDeep)
                     WaveformView(active: isListening)
-                    Text("Tap mic to finish").font(DS.mono(9)).foregroundStyle(.secondary)
+                    Text("点 mic 结束").font(DS.mono(9)).foregroundStyle(.secondary)
                 }
                 .frame(height: 34)
             } else {
                 HStack(spacing: 3) {
                     Image(systemName: "keyboard").font(.system(size: 10))
-                    Text("Typing always works")
+                    Text("手打永远可用")
                 }.font(DS.mono(9)).foregroundStyle(.secondary)
             }
             Button {
@@ -159,7 +156,7 @@ struct TaskComposerView: View {
             }
             .background(Circle().fill(DS.Ink.mint))
             .breathing(isListening)
-            .accessibilityLabel(isListening ? "Stop recording" : "Start recording")
+            .accessibilityLabel(isListening ? "结束录音" : "开始录音")
         }
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
@@ -172,11 +169,11 @@ struct TaskComposerView: View {
         return "\(s / 60):\(String(s % 60).paddingStart(2))"
     }
 
-    // ── Voice ──
+    // ── 语音 ──
     private func toggleMic() {
         if isListening { stopMic(); return }
         guard speech.isConfigured else {
-            micError = "Voice not configured (Settings → Voice: Azure region/key)"
+            micError = "语音未配置（设置 → 语音：Azure 区域/密钥）"
             return
         }
         micError = nil
@@ -217,11 +214,11 @@ struct TaskComposerView: View {
         return String(s.prefix(20))
     }
 
-    // ── Submit ──
+    // ── 发起 ──
     private func submit() {
         let t = title.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else {
-            errorText = "Title required — speak a sentence and it is generated"
+            errorText = "标题必填——说一句话，标题会自动生成"
             return
         }
         submitting = true
@@ -239,7 +236,7 @@ struct TaskComposerView: View {
     }
 }
 
-// Symmetric recording waveform (board 10 revision: mirrored around the center line, no emoji).
+// 对称录音波形（板 10 修正版：沿中线镜像，不用 emoji）。
 private struct WaveformView: View {
     let active: Bool
     @State private var phase = false
@@ -260,7 +257,7 @@ private struct WaveformView: View {
     }
 }
 
-// Vector microphone (capsule + stem + base — emoji rendering is unreliable; board 10/11 revision).
+// 矢量麦克风（胶囊+杆+底座——emoji 渲染不可靠，板 10/11 修正版）。
 struct MicGlyph: View {
     var body: some View {
         VStack(spacing: 2) {

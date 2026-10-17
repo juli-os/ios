@@ -1,31 +1,26 @@
-// Intake chat ViewModel (recovered from the Makro archive repo at 4a4a625^ on
-// 09-29 and rewired to juli-service's chat intake endpoint):
-//   · REST action surface → POST /api/chat/intake/* (turn/confirm/deny);
-//   · event stream unchanged — /ws/chat mirror (assistant/thinking/done/plan/
-//     phase/dispatched/system), zero transport-layer changes;
-//   · single intake discipline (the old casual/follow-through/query tri-mode
-//     was cut): clarify loop → plan card (title/summary/brief) → user
-//     confirmation → the server's startTask front door.
-// The voice machinery (AzureSpeechManager/VAD/submit phrase/quota) is reused as-is.
+// 开单对话 ViewModel（09-29 从 Makro 存档仓 4a4a625^ 捞回复用，接线适配
+// juli-service 的 chat intake 端点）：
+//   · REST 动作面 → POST /api/chat/intake/*（turn/confirm/deny）；
+//   · 事件流不变——/ws/chat 镜像（assistant/thinking/done/plan/phase/
+//     dispatched/system），传输层零改动；
+//   · 单一开单纪律（原 闲聊/落实/查询 三模式裁撤）：clarify loop →
+//     计划卡（title/summary/brief）→ 用户确认 → 服务端 startTask 正门。
+// 语音机械（AzureSpeechManager/VAD/提交短语/配额）原样复用。
 //
-// 0929 fixes for two user complaints:
-//   · disconnects: switching tabs tore down the socket (onDisappear→disconnect)
-//     + nothing reconnected on foreground return + normalClosure close codes
-//     did not reconnect → changed to "only a deliberate close skips reconnect"
-//     + foreground/background event wiring + stale URLSession invalidation;
-//     socket lifetime promoted to app level.
-//   · history loss: the transcript used to be pure in-memory UI state (old
-//     note: "losing it on reopen is acceptable") → reversed: local persistence
-//     added (Documents/chat-transcript.json, write-through, capped at 500).
+// 0929 用户双反馈修复：
+//   · 断线：切 tab 即拆 socket（onDisappear→disconnect）+ 回前台无人重连 +
+//     normalClosure 关码不重连 → 改为「仅主动关闭不重连」+ 前后台事件接线 +
+//     陈旧 URLSession invalidate；socket 生命周期升到 app 级。
+//   · 历史丢失：transcript 原是纯内存 UI 态（旧注释「重开丢掉可接受」）→
+//     翻案做本地持久化（Documents/chat-transcript.json，写穿透，上限 500 条）。
 
 import Foundation
 import Combine
 import UIKit
 
 extension ChatMessage: Codable {
-    // Retrospective Codable hand-written in ChatViewModel (Models.swift has
-    // parallel changes — leave it alone); Swift does not auto-synthesize across
-    // file extensions, so init(from:)/encode(to:) must be written out.
+    // 追溯性 Codable 手写在 ChatViewModel（Models.swift 有并行改动不动它）；
+    // Swift 跨文件 extension 不给自动合成，init(from:)/encode(to:) 都要明写。
     private enum CodingKeys: String, CodingKey { case id, role, text, timestamp, attachments }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -34,7 +29,7 @@ extension ChatMessage: Codable {
             role: .init(rawValue: try c.decode(String.self, forKey: .role)) ?? .system,
             text: try c.decode(String.self, forKey: .text),
             timestamp: try c.decode(Date.self, forKey: .timestamp),
-            // Attachment metadata (wf_3310501a9fe4): decodeIfPresent tolerance for keys missing in old records.
+            // 附件元数据（wf_3310501a9fe4）：旧档缺键 decodeIfPresent 容错。
             attachments: try c.decodeIfPresent([ChatAttachment].self, forKey: .attachments)
         )
     }
@@ -56,9 +51,8 @@ final class ChatViewModel: NSObject, ObservableObject {
     @Published private(set) var isStreaming = false
     @Published private(set) var thinkingText: String?
 
-    // Attachment tray (wf_3310501a9fe4): local state of attachments waiting to
-    // send — data feeds tray thumbnails and upload; on send each item is
-    // uploaded and swapped for the server's ChatAttachment metadata.
+    // 附件托盘（wf_3310501a9fe4）：待发附件本地态——data 供托盘缩略与
+    // 上传；发送时逐件上传换服务端 ChatAttachment 元数据。
     @Published var pendingAttachments: [PendingAttachment] = []
 
     struct PendingAttachment: Identifiable {
@@ -70,14 +64,14 @@ final class ChatViewModel: NSObject, ObservableObject {
         static let maxCount = 5
     }
 
-    /// Add to the tray (all entry points go through here): size/count limits enforced; over-limit reported in place via a system bubble.
+    /// 托盘加入（入口统一走这里）：限大小/件数，超限就地报系统气泡。
     func addPendingAttachment(data: Data, name: String, mime: String) {
         if data.count > PendingAttachment.maxBytes {
-            appendMessage(.system, "[Attachment ‘\(name)’ is over 10MB — not added]")
+            appendMessage(.system, "[附件「\(name)」超过 10MB，未添加]")
             return
         }
         guard pendingAttachments.count < PendingAttachment.maxCount else {
-            appendMessage(.system, "[At most \(PendingAttachment.maxCount) attachments per message]")
+            appendMessage(.system, "[一条消息最多 \(PendingAttachment.maxCount) 个附件]")
             return
         }
         pendingAttachments.append(PendingAttachment(data: data, name: name, mime: mime))
@@ -102,11 +96,10 @@ final class ChatViewModel: NSObject, ObservableObject {
 
     // Intake phase (discuss → proposed). pendingPlan is non-nil while a
     // brief is awaiting the user's confirmation; CallView shows the
-    // intake/cancel buttons while set.
+    // 开单/取消 buttons while set.
     @Published private(set) var pendingPlan: PendingPlan?
-    /// Plan-card "auto-approve this job" checkbox (2026-10-07): travels into
-    /// meta with confirm — a human control surface; whatever the LLM writes in
-    /// its plan block is not honored.
+    /// 计划卡「本单免批」勾选（2026-10-07）：confirm 时随 body 进 meta——
+    /// 人的 control 面，LLM 计划块里写什么都不认。
     @Published var pendingAutoApprove = false
     @Published private(set) var callPhase: String = "discuss"
 
@@ -119,17 +112,12 @@ final class ChatViewModel: NSObject, ObservableObject {
     private var reconnectDelay: TimeInterval = 1
     private var streamingWatchdog: Task<Void, Never>?
     private var pendingTurns = 0
-    /// Set only when the user/lifecycle deliberately closes (disconnect) —
-    /// every other close code (including the server's normal 1000/1001) is
-    /// treated as unexpected and auto-reconnects as usual.
+    /// 仅在用户/生命周期主动关闭（disconnect）时置位——其余一切关闭码
+    /// （含服务器正常关 1000/1001）都视为意外，照常自动重连。
     private var userClosed = false
-    /// During background/suspension (0930: the root cause of still seeing
-    /// "connection lost" after switching apps) — a suspension-induced
-    /// disconnect is expected behavior and is not announced; the turn may also
-    /// still be running server-side and frames can resume after the foreground
-    /// reconnect. Closing out is left to real events / the watchdog after
-    /// returning to foreground — the turn is not killed at the moment of
-    /// disconnect.
+    /// 后台/挂起期（0930：切 app 后仍见「连接中断」的根因）——挂起致断是
+    /// 预期行为不播报；且回合可能仍在服务端跑，回前台重连后帧可续上，
+    /// 收口交给回前台后的真实事件/看门狗，不在断线瞬间杀回合。
     private var appInBackground = false
     private let config: Config
     private let api: APIClient
@@ -142,11 +130,10 @@ final class ChatViewModel: NSObject, ObservableObject {
         super.init()
         wireSpeech()
         restoreTranscript()
-        // Socket lifetime promoted to app level (tab switches no longer tear
-        // it down): true background → deliberate clean close (iOS will kill it
-        // anyway); foreground return → reconnect immediately. makroReconnect is
-        // dispatched by MakroApp's scenePhase=.active (previously only Terminal
-        // listened; chat never got reconnected on foreground return).
+        // socket 生命周期升到 app 级（切 tab 不再拆）：
+        // 真后台 → 主动干净关闭（反正 iOS 会掐）；回前台 → 立即接回。
+        // makroReconnect 由 MakroApp 的 scenePhase=.active 派发（原来只有
+        // Terminal 在听，聊天回前台一直没人接）。
         NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -196,7 +183,7 @@ final class ChatViewModel: NSObject, ObservableObject {
                 self.stopSpeaking()
             }
         }
-        // Surface partial recognition so the UI can show "listening…".
+        // Surface partial recognition so the UI can show "正在听…".
         speech.$listenState.sink { [weak self] state in
             guard let self else { return }
             switch state {
@@ -234,7 +221,7 @@ final class ChatViewModel: NSObject, ObservableObject {
         // so the hint teaches the pause-to-send behavior.
         speech.onMaxDurationHint = { [weak self] in
             _ = self
-            NowPlayingManager.shared.updatePhase("Long utterance — pause to send")
+            NowPlayingManager.shared.updatePhase("说话有点久 — 停顿一下即发送")
         }
     }
 
@@ -251,7 +238,7 @@ final class ChatViewModel: NSObject, ObservableObject {
         stopPing()
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
-        urlSession?.invalidateAndCancel() // the old implementation only cancelled tasks without destroying the session — leaked one URLSession per tab switch
+        urlSession?.invalidateAndCancel() // 旧实现只 cancel 任务不毁会话——每次切 tab 泄一个 URLSession
         urlSession = nil
         connectionState = .disconnected
     }
@@ -276,74 +263,63 @@ final class ChatViewModel: NSObject, ObservableObject {
         connect()
     }
 
-    /// Reconnect recovery: pull the intake state to recover a staged plan card
-    /// (the server does not replay the conversation; the transcript is carried
-    /// by local persistence — see restoreTranscript).
+    /// 重连恢复：拉 intake 状态把暂存中的计划卡找回来（服务端不回放对话，
+    /// transcript 由本地持久化承接——见 restoreTranscript）。
     func loadHistory() async {
         guard let state = try? await api.fetchIntakeState() else { return }
         pendingPlan = state.plan
         callPhase = state.phase
     }
 
-    /// Suspension-gap backfill (wf_e2f2bfba8865 P0, 2026-10-05): /ws/chat does
-    /// not replay history, so assistant/done frames missed while suspended are
-    /// lost forever (the root cause of the watchdog's 110s "response timeout").
-    /// After every WS reconnect, pull /api/chat/history (the chathub 200-entry
-    /// ring) and align the tail turn against local state — idempotent: zero
-    /// action when content already matches.
-    /// Alignment rules: take the trailing assistant run (to the end or a done)
-    /// from the history tail as "the full text T of the latest turn" — local
-    /// last assistant == T (already synced); it is a prefix of T (stream cut
-    /// mid-flight) → replace and complete; local tail is user (the whole turn
-    /// was lost) → append.
-    /// If history carries done and isStreaming → the server already finished;
-    /// close out locally (the watchdog clears with it).
+    /// 挂起期补帧（wf_e2f2bfba8865 P0，2026-10-05）：/ws/chat 不回放历史，
+    /// 挂起期错过的 assistant/done 帧永久丢失（看门狗 110s 报「响应超时」的
+    /// 根因）。每次 WS 接回后拉 /api/chat/history（chathub 环形 200 条），
+    /// 与本地做尾部回合对齐——幂等：内容一致时零动作。
+    /// 对齐规则：取 history 尾部最后一个 assistant 连续块（至末尾或 done）为
+    /// 「最新回合全文 T」——本地最后 assistant == T（已同步）；是 T 的前缀
+    /// （流式中途断）→ 替换补齐；本地尾部是 user（整回合丢失）→ append。
+    /// history 带 done 且 isStreaming → 服务端已跑完，本地收口（看门狗随之解除）。
     func resyncFromHistory() async {
         guard let frames = try? await api.fetchChatHistory(), !frames.isEmpty else { return }
-        // Trailing assistant run (skip thinking/tool intermediate frames; scan backwards until a non-assistant frame)
+        // 尾部 assistant 块（跳过 thinking/tool 等中间帧；倒扫到非 assistant 止）
         var tail: [String] = []
         var hasDone = false
         for f in frames.reversed() {
             if f.type == "assistant" { tail.insert(f.data, at: 0); continue }
             if f.type == "done" {
-                // R1 P2-7 / R3 rework: before letting a done through, check the
-                // tail —
-                //   · non-empty tail = a turn mid-stream (text emitted, no done
-                //     yet); the done encountered belongs to the previous turn,
-                //     stop in place (R2 let it through unconditionally, merging
-                //     the old full text across turns);
-                //   · empty tail and no done seen = the latest turn genuinely
-                //     has no body, let it through and keep collecting (the
-                //     normal end-of-turn marker pulled in by close-out);
-                //   · empty tail but hasDone already set = consecutive empty
-                //     turns, stop; do not cross the boundary into old turns.
+                // R1 P2-7 / R3 重修：done 分支放行前先查 tail——
+                //   · tail 非空 = 流中回合（已出 text 尚无 done），撞到的 done
+                //     属上一回合，就地停（R2 版无条件放行会跨回合合并旧全文）；
+                //   · tail 空且未见 done = 最新回合确无正文，放行继续收集
+                //     （正常收口回拉的回合结束标记）；
+                //   · tail 空但 hasDone 已置 = 连续空回合，停，不跨界采旧回合。
                 if !tail.isEmpty { break }
                 if !hasDone { hasDone = true; continue }
                 break
             }
-            break // any other frame = turn boundary
+            break // 其他帧=回合边界
         }
         guard !tail.isEmpty || hasDone else { return }
         let full = tail.joined()
         if !full.isEmpty {
             if let lastIdx = messages.lastIndex(where: { $0.role == .assistant }) {
-                // Only touch the latest turn's bubble: it must come after the last user message (never rewrite historical turns)
+                // 只动「最后一回合」的气泡：它必须晚于最后一条 user（防改历史回合）
                 let lastUser = messages.lastIndex(where: { $0.role == .user }) ?? -1
                 if lastIdx > lastUser {
                     let local = messages[lastIdx].text
-                    if local == full { /* already synced */ }
+                    if local == full { /* 已同步 */ }
                     else if full.hasPrefix(local) || local.isEmpty {
-                        messages[lastIdx].text = full // prefix → complete the stream cut half-way
+                        messages[lastIdx].text = full // 前缀 → 补齐断在半路的流
                     } else if lastIdx == messages.count - 1, hasDone, !local.isEmpty {
-                        messages[lastIdx].text = full // conservative replace: the local leftover is a partial fragment
+                        messages[lastIdx].text = full // 保守替换：本地残留不完整片段
                     } else {
-                        appendMessage(.assistant, full) // no local counterpart (mismatch) → append
+                        appendMessage(.assistant, full) // 本地无对应（对不上）→ 追加
                     }
                 } else {
                     appendMessage(.assistant, full)
                 }
             } else {
-                appendMessage(.assistant, full) // the whole turn was lost (local tail is user)
+                appendMessage(.assistant, full) // 整回合丢失（本地尾部是 user）
             }
         }
         if hasDone && isStreaming {
@@ -353,18 +329,17 @@ final class ChatViewModel: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - Transcript persistence (0929: history lost on app relaunch → local write-through)
+    // MARK: - Transcript 持久化（0929：重开 APP 历史丢掉 → 本地写穿透）
 
-    /// Capped at 500 entries: enough context to look back on; full JSON read/write is not a cost concern.
+    /// 上限 500 条：够回看上下文，JSON 全量读写不构成开销。
     private static let transcriptLimit = 500
     private static var transcriptFileURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("chat-transcript.json")
     }
 
-    /// Single entry point: every message lands through here (append +
-    /// persist). In-place merges of streaming chunks skip the disk; one write
-    /// happens at turn close-out (done/error/interrupt).
+    /// 统一入口：所有消息落账都走这里（append + 持久化）。流式 chunk 的原位
+    /// 合并不写盘，回合收口（done/错误/中断）时统一落一次。
     private func appendMessage(_ role: ChatMessage.Role, _ text: String) {
         messages.append(ChatMessage(role: role, text: text))
         persistTranscript()
@@ -388,7 +363,7 @@ final class ChatViewModel: NSObject, ObservableObject {
         messages = Array(store.suffix(Self.transcriptLimit))
     }
 
-    /// Clear the conversation (start a new intake): memory and disk cleared together.
+    /// 清空对话（新开一单）：内存与磁盘一起清。
     func clearTranscript() {
         messages = []
         try? FileManager.default.removeItem(at: Self.transcriptFileURL)
@@ -397,20 +372,16 @@ final class ChatViewModel: NSObject, ObservableObject {
     /// Send a chat message. `voice` flags the message as coming from a voice
     /// call so the server uses a spoken-friendly prompt (conversational, no
     /// tables/code). STT turns set voice = isInCall; typed messages omit it.
-    /// Attachments (wf_3310501a9fe4): pendingAttachments are uploaded per item
-    /// when the message sends, then carried as references; a pure-attachment
-    /// message uses the body placeholder "[N attachments]" (the server requires
-    /// non-empty input).
+    /// 附件（wf_3310501a9fe4）：pendingAttachments 随消息逐件上传后携带引用；
+    /// 纯附件消息正文占位「[附件 N 件]」（服务端要求 input 非空）。
     func send(text: String, voice: Bool = false) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let outgoing = pendingAttachments
         guard !trimmed.isEmpty || !outgoing.isEmpty else { return }
         pendingAttachments = []
-        let displayText = trimmed.isEmpty ? "[\(outgoing.count) attachments]" : trimmed
-        // No attachments: keep the optimistic immediate display (original
-        // behavior); with attachments: display only after upload succeeds (the
-        // bubble needs the attachment metadata the server fills in); the
-        // streaming indicator holds the place during upload.
+        let displayText = trimmed.isEmpty ? "[附件 \(outgoing.count) 件]" : trimmed
+        // 无附件：保持乐观先上屏（原行为）；有附件：上传成功才上屏（气泡
+        // 需携带服务端回填的附件元数据），上传期间靠 streaming 指示器占位。
         if outgoing.isEmpty {
             messages.append(ChatMessage(role: .user, text: displayText))
             persistTranscript()
@@ -429,11 +400,9 @@ final class ChatViewModel: NSObject, ObservableObject {
                 for p in outgoing {
                     uploaded.append(try await api.uploadChatAttachment(data: p.data, name: p.name, mime: p.mime))
                 }
-                // R1 P2-5: reset the watchdog after uploads finish — the time
-                // spent uploading 5×10MB on a slow network no longer eats into
-                // the turn's 110s (during upload the old timer set at dispatch
-                // still covers; a genuinely hung upload still times out and
-                // closes out); sends without attachments do not reset.
+                // R1 P2-5：上传完成后重置看门狗——5×10MB 慢网上传的耗时不再
+                // 挤占回合的 110s（上传期仍由发起时那枚旧计时兜底，真挂死照
+                // 样超时收口）；无附件发送不重置。
                 if !outgoing.isEmpty { startStreamingWatchdog() }
                 if !uploaded.isEmpty {
                     messages.append(ChatMessage(role: .user, text: displayText, attachments: uploaded))
@@ -468,9 +437,8 @@ final class ChatViewModel: NSObject, ObservableObject {
 
     /// Failsafe: if no `done`/`error` arrives within 110s (WS dropped the
     /// broadcast, or a server path skipped it), force the turn closed so the
-    /// indicator never sticks. Aligned with the turn request's 120s timeout
-    /// (intake multi-round LLM turns measured at 30s+; 60s would falsely kill
-    /// long turns).
+    /// indicator never sticks. 与 turn 请求的 120s 超时对齐（intake 多轮
+    /// LLM 回合 30s+ 实测，60s 会误杀长回合）。
     private func startStreamingWatchdog() {
         streamingWatchdog?.cancel()
         streamingWatchdog = Task { [weak self] in
@@ -478,7 +446,7 @@ final class ChatViewModel: NSObject, ObservableObject {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard let self, self.isStreaming else { return }
-                self.appendMessage(.system, "[timed out — closed automatically]")
+                self.appendMessage(.system, "[响应超时,已自动结束]")
                 self.endStreaming()
             }
         }
@@ -486,16 +454,14 @@ final class ChatViewModel: NSObject, ObservableObject {
 
     func cancel() {
         // User-initiated stop: don't wait for the server's done (that may be
-        // exactly what's stuck). Reset locally right away. Intake turn is a
-        // synchronous request scope — the server has no cancellable background
-        // generation; closing out locally is complete.
+        // exactly what's stuck). Reset locally right away. Intake turn 是同
+        // 步请求作用域——服务端无可取消的后台生成，本地收口即完整。
         endStreaming()
     }
 
-    /// Confirm the staged intake plan → server runs startTask (the intake
-    /// front door). Failures made visible: the card stays retryable (the
-    /// server-side staging is unconsumed), never silently swallowed — intake
-    /// is the core verb of this feature.
+    /// Confirm the staged intake plan → server runs startTask（开单正门）.
+    /// 失败显性化：卡片保留可重试（服务端 staged 未消费），绝不静默吞错——
+    /// 开单是本 feat 的核心动词。
     func confirmPlan() {
         guard pendingPlan != nil else { return }
         Task {
@@ -503,7 +469,7 @@ final class ChatViewModel: NSObject, ObservableObject {
                 try await api.confirmIntakePlan(autoApprove: pendingAutoApprove)
                 pendingPlan = nil
             } catch {
-                appendMessage(.system, "[Job creation failed: \(error.localizedDescription)] — the plan card is kept, you can retry")
+                appendMessage(.system, "[开单失败: \(error.localizedDescription)] — 计划卡已保留，可重试")
             }
         }
     }
@@ -515,8 +481,8 @@ final class ChatViewModel: NSObject, ObservableObject {
             do {
                 try await api.denyIntakePlan()
             } catch {
-                // A failed cancel does not block the conversation (the next turn's input also makes the server drop the staging).
-                appendMessage(.system, "[Cancel failed: \(error.localizedDescription)]")
+                // 取消失败不阻塞继续对话（下轮输入服务端也会丢弃暂存）。
+                appendMessage(.system, "[取消失败: \(error.localizedDescription)]")
             }
         }
     }
@@ -554,12 +520,11 @@ final class ChatViewModel: NSObject, ObservableObject {
 
     /// Start a continuous voice call: the mic stays open, every recognized
     /// utterance is sent, and every reply is read aloud (with the mic briefly
-    /// suspended during playback to avoid echo). The intake chat has no
-    /// server-side call state (the intake loop has no dispatch-class tool to
-    /// intercept); start/stop are purely local.
+    /// suspended during playback to avoid echo). 开单对话无服务端通话态
+    /// （intake loop 无派发类工具可拦），起止纯本地。
     func startCall() {
         guard speech.isConfigured else {
-            appendMessage(.system, "Fill in the Azure Speech key and region in Settings first")
+            appendMessage(.system, "请先在设置里填写 Azure Speech key 和 region")
             return
         }
         isInCall = true
@@ -571,7 +536,7 @@ final class ChatViewModel: NSObject, ObservableObject {
         // Defensive: a stale suspendAutoRestart from an earlier call (endCall
         // normally clears it) must not mute the fresh recognizer.
         speech.suspendAutoRestart = false
-        // Intake chat = a pause after speaking sends (silence auto-completes the turn; the submit phrase still completes instantly).
+        // 开单对话 = 说完了停顿即发送（静默自动成回；说提交短语仍即时成回）。
         speech.startListening(continuous: true, commit: config.vadEnabled, silenceAuto: true)
         // Wire lock-screen controls.
         NowPlayingManager.shared.onHangUp = { [weak self] in
@@ -615,7 +580,7 @@ final class ChatViewModel: NSObject, ObservableObject {
         speech.suspendAutoRestart = true
         stopListening()
         stopSpeaking()
-        NowPlayingManager.shared.updatePhase("Paused")
+        NowPlayingManager.shared.updatePhase("已暂停")
     }
 
     /// Resume a paused call: rebuild the recognizer (~1-2s) and continue the
@@ -627,9 +592,9 @@ final class ChatViewModel: NSObject, ObservableObject {
         stopSpeaking()
         speech.startListening(continuous: true, commit: config.vadEnabled, silenceAuto: true)
         // startListening clears the suspended flag; re-apply mute or the mic
-        // would go live while the UI / lock screen still say muted.
+        // would go live while the UI / lock screen still say 已静音.
         if isMuted { speech.suspendListening() }
-        NowPlayingManager.shared.updatePhase(isMuted ? "Muted" : "Listening…")
+        NowPlayingManager.shared.updatePhase(isMuted ? "已静音" : "正在聆听…")
     }
 
     /// Mute/unmute the mic during a call (mapped to the lock-screen play/pause button).
@@ -638,21 +603,19 @@ final class ChatViewModel: NSObject, ObservableObject {
         isMuted.toggle()
         if isMuted {
             speech.suspendListening()
-            NowPlayingManager.shared.updatePhase("Muted")
+            NowPlayingManager.shared.updatePhase("已静音")
         } else {
             speech.resumeListening()
-            NowPlayingManager.shared.updatePhase("Listening…")
+            NowPlayingManager.shared.updatePhase("正在聆听…")
         }
     }
 
-    // MARK: - WebSocket (/ws/chat event stream, transport layer identical to the archived version)
+    // MARK: - WebSocket（/ws/chat 事件流，传输层与存档版一致）
 
     private func openConnection() {
         let url = config.chatWSURL
-        // Session-level replacement: the old implementation's repeated
-        // openConnection only swapped the task without destroying the session —
-        // delegate leaks + stale callbacks (the more reconnects, the faster the
-        // leak).
+        // 会话级换新：旧实现反复 openConnection 只换 task 不毁 session，
+        // delegate 泄漏 + 陈旧回调（断线重连越多漏得越快）。
         urlSession?.invalidateAndCancel()
         urlSession = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
         let wsTask = urlSession!.webSocketTask(with: url)
@@ -692,9 +655,8 @@ final class ChatViewModel: NSObject, ObservableObject {
             thinkingText! += chunk
         case "assistant":
             thinkingText = nil
-            // The closing turn's text event carries a ```intake-plan block —
-            // stripped from the bubble (the plan arrives via the plan event and
-            // its own card); raw JSON never enters the chat UI (review P1-1).
+            // 收敛回合的 text 事件携带 ```intake-plan 块——气泡里剥掉（计划
+            // 经 plan 事件走卡片），原始 JSON 不进聊天界面（审查 P1-1）。
             let chunk = stripPlanBlocks(json["data"] as? String ?? "")
             if !chunk.isEmpty {
                 if !messages.isEmpty && messages.last?.role == .assistant && isStreaming {
@@ -706,7 +668,7 @@ final class ChatViewModel: NSObject, ObservableObject {
         case "done":
             thinkingText = nil
             markTurnEnd()
-            persistTranscript() // in-place merges of streaming chunks skip the disk; turn close-out writes once
+            persistTranscript() // 流式 chunk 原位合并不写盘，回合收口统一落账
             // Read aloud when this turn was triggered by voice, or whenever we
             // are in an active call (every reply is spoken in call mode).
             if (expectSpokenReply || isInCall), !isCallPaused,
@@ -720,9 +682,8 @@ final class ChatViewModel: NSObject, ObservableObject {
         case "error":
             let msg = json["data"] as? String ?? "Unknown error"
             appendMessage(.system, "[error: \(msg)]")
-            // Only a truly in-flight turn closes out — a chat:error from a
-            // failed confirm is not inside a turn; decrementing pendingTurns by
-            // mistake would extinguish the indicator early (review P2).
+            // 只有真回合在途才收口——confirm 失败的 chat:error 不在回合内，
+            // 误减 pendingTurns 会提前熄灭指示器（审查 P2）。
             if pendingTurns > 0 { markTurnEnd() }
         case "system":
             let msg = json["data"] as? String ?? ""
@@ -753,32 +714,28 @@ final class ChatViewModel: NSObject, ObservableObject {
         stopPing()
         task = nil
         connectionState = .disconnected
-        // Background/suspension-induced disconnect = expected behavior
-        // (didEnterBackground already closed deliberately; the failure callback
-        // for an OS-severed line during suspension is only handled after
-        // returning to foreground) — stay silent, no "connection lost"
-        // announcement, and do not kill in-flight turns: the server may still
-        // be running; assistant/done frames resume normally after the
-        // foreground reconnect (if truly lost, the watchdog closes out).
+        // 后台/挂起致断 = 预期行为（didEnterBackground 已主动关过；挂起期
+        // OS 掐线的 failure 回调在回前台后才被处理）——沉默，不播「连接中
+        // 断」，也不杀在途回合：服务端可能还在跑，回前台重连后 assistant/
+        // done 帧照常续上（真丢了由看门狗收口）。
         let suspendedDrop = appInBackground || UIApplication.shared.applicationState != .active
         if isStreaming && !suspendedDrop {
             // WS dropped mid-turn: the backend's `done` broadcast has no
             // buffer and no replay, so it's already lost. Close the turn now
             // rather than leaving the indicator pinned until the watchdog.
-            appendMessage(.system, "[connection lost — reconnecting]")
+            appendMessage(.system, "[连接中断 · 自动重连中]")
             endStreaming()
         }
         if suspendedDrop {
-            // No backoff reconnection scheduled during suspension (timers do
-            // not run = pure spinning) — makroReconnect reconnects immediately
-            // on foreground return.
+            // 挂起期不排退避重连（定时器不跑=纯空转）——回前台由
+            // makroReconnect 立即接回。
             return
         }
         scheduleReconnect()
     }
 
     private func scheduleReconnect() {
-        // No reconnect on deliberate close (background/exit) or during suspension — the latter is reconnected by makroReconnect on foreground return
+        // 主动关闭（后台/退出）与挂起期不重连——后者回前台由 makroReconnect 接回
         guard !userClosed, !appInBackground else { return }
         let delay = reconnectDelay
         reconnectDelay = min(reconnectDelay * 2, 60)
@@ -787,7 +744,7 @@ final class ChatViewModel: NSObject, ObservableObject {
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard !Task.isCancelled else { return }
             guard let self else { return }
-            // Prevent double-connects: if a previous reconnect already moved the state off disconnected, this one yields
+            // 防双开：前一个重连已把状态推离 disconnected 时本次让位
             guard self.connectionState == .disconnected, !self.userClosed else { return }
             self.connectionState = .connecting
             self.openConnection()
@@ -812,13 +769,11 @@ extension ChatViewModel: URLSessionWebSocketDelegate {
         Task { @MainActor in
             self.connectionState = .connected
             self.reconnectDelay = 1
-            // Pull intake state immediately after reconnecting: phase/plan may
-            // have changed during the disconnect window (confirmed/cancelled on
-            // another surface) — do not mislead the user with a stale card.
+            // 接回后立即拉一次 intake 状态：断线窗口里 phase/plan 可能已变
+            //（确认/取消在别的面发生），别拿旧卡片误导用户。
             await self.loadHistory()
-            // Backfill (wf_e2f2bfba8865 P0): assistant/done frames missed
-            // during suspension are realigned from the 200-entry ring history —
-            // "switch out of the app and come back to the full reply".
+            // 补帧（wf_e2f2bfba8865 P0）：挂起期错过的 assistant/done 帧
+            // 从 200 条环形历史对齐补回——「切出 APP 回来还能看到完整回复」。
             await self.resyncFromHistory()
         }
     }
@@ -828,11 +783,9 @@ extension ChatViewModel: URLSessionWebSocketDelegate {
             self.stopPing()
             self.task = nil
             self.connectionState = .disconnected
-            // The old logic only reconnected on non-normalClosure — normal
-            // close codes from the server/middle layer (1000/1001) left chat
-            // permanently down until the page was re-entered. Now only a
-            // deliberate user close (userClosed) skips reconnect; everything
-            // else is treated as unexpected.
+            // 旧逻辑只对非 normalClosure 重连——服务器/中间层的正常关码
+            // （1000/1001）会让聊天永久躺断直到重进页面。现在只有用户主动
+            // 关闭（userClosed）不重连，其余一律按意外处理。
             if !self.userClosed { self.scheduleReconnect() }
         }
     }

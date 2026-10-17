@@ -22,7 +22,7 @@ final class NowPlayingManager {
 
     private var callStart: Date?
     private var timer: Timer?
-    private var phaseLabel = "In call"
+    private var phaseLabel = "通话中"
 
     private init() {}
 
@@ -31,7 +31,7 @@ final class NowPlayingManager {
     /// Begin publishing call info to the lock screen and wire remote commands.
     func startCall() {
         callStart = Date()
-        phaseLabel = "Listening…"
+        phaseLabel = "正在聆听…"
         configureRemoteCommands()
         updateInfo()
         // Refresh elapsed time every second so the lock-screen timer ticks.
@@ -88,7 +88,7 @@ final class NowPlayingManager {
 
     private func updateInfo() {
         var info: [String: Any] = [:]
-        info[MPMediaItemPropertyTitle] = "Makro call"
+        info[MPMediaItemPropertyTitle] = "Makro 通话"
         info[MPMediaItemPropertyArtist] = phaseLabel
 
         if let start = callStart {

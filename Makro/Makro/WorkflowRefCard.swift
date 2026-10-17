@@ -1,15 +1,13 @@
 import SwiftUI
 
-// In-chat work-order reference card (2026-10-04, wf_8bbd5a47b528): when a
-// job ID (wf_ + 12 hex digits) appears in message text, render a card under
-// the bubble — title/status visible at a glance; tapping the card deep-links
-// via DeepLinkRouter.artifactsProducer to the Artifacts filtered view
-// (MakroApp already subscribes to that value and switches tabs;
-// ArtifactsView filters by session=wfId, the chip shows the case name — the
-// same mechanism as the MeshNodeRow artifact chip).
+// chat 内任务单引用卡（2026-10-04，wf_8bbd5a47b528）：消息文本里出现单子 ID
+// （wf_ + 12 位十六进制）即在气泡下渲染卡片——标题/状态一眼可见，点卡经
+// DeepLinkRouter.artifactsProducer 深链到 Artifacts 过滤视图（MakroApp 已
+// 订阅该值自动切 tab；ArtifactsView 按 session=wfId 过滤，芯片显示案卷名，
+// 与 MeshNodeRow 产物芯片同一机制）。
 
 enum WorkflowRef {
-    /// wf_ + 12 hex digits; deduplicated, order kept (a message mentioning the same job repeatedly yields one card).
+    /// wf_ + 12 位十六进制；去重保序（一条消息提到同一单多次只出一张卡）。
     static func ids(in text: String) -> [String] {
         guard let re = try? NSRegularExpression(pattern: "wf_[0-9a-f]{12}") else { return [] }
         let ns = text as NSString
@@ -24,11 +22,9 @@ enum WorkflowRef {
     }
 }
 
-/// Tree cache shared across cards (R1 P2-9): in a long session the same
-/// wfID renders one card per message, and the old implementation had each
-/// card's .task hit /api/workflow/:id/tree on its own — a process-level
-/// per-wfID cache + 60s TTL (a running state must not go permanently
-/// stale); at most one real request per job within the window.
+/// 树缓存跨卡共享（R1 P2-9）：长会话同一 wfID 随多条消息各渲染一张卡，旧实现
+/// 每卡 .task 各自打一次 /api/workflow/:id/tree——进程级按 wfID 缓存 + 60s
+/// TTL（running 状态不能永久陈旧），窗口内同一单至多一次真实请求。
 @MainActor
 enum WorkflowTreeCache {
     private static var store: [String: (tree: LifecycleWorkflowTree, at: Date)] = [:]
@@ -46,21 +42,19 @@ enum WorkflowTreeCache {
 
 struct WorkflowRefCard: View {
     let wfID: String
-    /// "➕ Follow-up" (2026-10-04, wf_9d93ee9f7adb): create a follow-up based
-    /// on this job — the callback carries (wfID, original title); ChatView
-    /// prefills the input box (with the original job's context) and still
-    /// goes through the existing "confirm on the plan card to start" flow,
-    /// no bypass.
+    /// 「➕ 跟进」（2026-10-04，wf_9d93ee9f7adb）：基于该单创建 follow-up——
+    /// 回调携 (wfID, 原单标题)，ChatView 预填输入框（含原单上下文）后仍走
+    /// 既有「计划卡确认才开单」流程，不旁路。
     var onFollow: ((String, String) -> Void)? = nil
     @State private var tree: LifecycleWorkflowTree?
     @State private var failed = false
-    // Job detail entry (wf_1b3f9eaa55f9): reuses the same sheet as the AgentsView case card.
+    // 单子详情入口（wf_1b3f9eaa55f9）：复用 AgentsView 案卷卡同款 sheet。
     @StateObject private var caseVM = LifecycleViewModel()
     @State private var showDetail = false
 
     private var wf: LifecycleWorkflow? { tree?.workflow }
 
-    /// Status colors (same basis as the Flow panel): running breathing blue, completed green, failed red, cancelled gray.
+    /// 状态色（与 Flow 面板口径一致）：进行中呼吸蓝，完成绿，失败红，取消灰。
     private var statusColor: Color {
         switch wf?.status {
         case "running", "queued": return DS.Ink.mint
@@ -73,22 +67,21 @@ struct WorkflowRefCard: View {
 
     private var statusLabel: String {
         switch wf?.status {
-        case "running": return "Running"
-        case "queued": return "Queued"
-        case "completed": return "Completed"
-        case "failed": return "Failed"
-        case "cancelled": return "Cancelled"
+        case "running": return "进行中"
+        case "queued": return "排队"
+        case "completed": return "已完成"
+        case "failed": return "失败"
+        case "cancelled": return "已取消"
         default: return "…"
         }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            // Info row (tap = artifacts, keeping the original primary-tap habit)
+            // 信息行（点=产物，保持原主点击习惯）
             Button {
-                // Same as the MeshNodeRow artifact chip: set producer →
-                // MakroApp switches to the Artifacts tab; ArtifactsView
-                // filters by session=wfId to all of that job's artifacts.
+                // 同 MeshNodeRow 产物芯片：置 producer → MakroApp 切 Artifacts tab，
+                // ArtifactsView 按 session=wfId 过滤出该单全部产物。
                 DeepLinkRouter.shared.artifactsProducer = wfID
             } label: {
                 HStack(spacing: 9) {
@@ -96,7 +89,7 @@ struct WorkflowRefCard: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(DS.Ink.mintDeep)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(failed ? "Job \(wfID)" : (wf?.title ?? "Loading job…"))
+                        Text(failed ? "单子 \(wfID)" : (wf?.title ?? "读取单子…"))
                             .font(DS.text(13.5, .semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
@@ -120,7 +113,7 @@ struct WorkflowRefCard: View {
                             HStack(spacing: 3) {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.system(size: 10, weight: .semibold))
-                                Text("Follow up")
+                                Text("跟进")
                                     .font(DS.mono(10, .semibold))
                             }
                             .foregroundStyle(DS.Ink.mintDeep)
@@ -130,7 +123,7 @@ struct WorkflowRefCard: View {
                             .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Create a follow-up from job \(wf?.title ?? wfID)")
+                        .accessibilityLabel("基于单子 \(wf?.title ?? wfID) 创建跟进任务")
                     }
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .bold))
@@ -138,12 +131,10 @@ struct WorkflowRefCard: View {
                 }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open artifacts of job \(wf?.title ?? wfID)")
+            .accessibilityLabel("打开单子 \(wf?.title ?? wfID) 的产物")
 
-            // Three navigation entries (wf_430649acd604): 📋 the Workflow
-            // process / 🗂 Artifact outcomes / 👤 the Agents work scene (the
-            // terminal of the job's resolved session — who is working, and
-            // how far).
+            // 三导航入口（wf_430649acd604）：📋 Workflow 过程 / 🗂 Artifact 结果 /
+            // 👤 Agents 执行现场（该单 resolved session 的终端——谁在干、干到哪）。
             HStack(spacing: 7) {
                 Button {
                     Task { await caseVM.select(wfID) }
@@ -152,7 +143,7 @@ struct WorkflowRefCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: "list.bullet.rectangle")
                             .font(.system(size: 10.5, weight: .semibold))
-                        Text("Details")
+                        Text("详情")
                             .font(DS.text(12, .semibold))
                     }
                     .foregroundStyle(DS.Ink.mintDeep)
@@ -162,7 +153,7 @@ struct WorkflowRefCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("View job \(wf?.title ?? wfID) details")
+                .accessibilityLabel("查看单子 \(wf?.title ?? wfID) 详情")
 
                 Button {
                     DeepLinkRouter.shared.artifactsProducer = wfID
@@ -170,7 +161,7 @@ struct WorkflowRefCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: "square.grid.2x2")
                             .font(.system(size: 10.5, weight: .semibold))
-                        Text("Artifacts")
+                        Text("产物")
                             .font(DS.text(12, .semibold))
                     }
                     .foregroundStyle(DS.Ink.mintDeep)
@@ -180,12 +171,11 @@ struct WorkflowRefCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Open artifacts of job \(wf?.title ?? wfID)")
+                .accessibilityLabel("打开单子 \(wf?.title ?? wfID) 的产物")
 
                 Button {
-                    // Work scene: DeepLinkRouter.session → Agents tab +
-                    // path=[session] goes straight to that session's terminal
-                    // (AgentsView's existing replay mechanism).
+                    // 执行现场：DeepLinkRouter.session → Agents tab + path=[session]
+                    // 直达该会话终端（AgentsView 现成 replay 机制）。
                     if let s = wf?.session, !s.isEmpty {
                         DeepLinkRouter.shared.session = s
                     }
@@ -193,7 +183,7 @@ struct WorkflowRefCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: "person.wave.2")
                             .font(.system(size: 10.5, weight: .semibold))
-                        Text(wf?.session?.isEmpty == false ? "Live" : "Not dispatched")
+                        Text(wf?.session?.isEmpty == false ? "现场" : "未派发")
                             .font(DS.text(12, .semibold))
                     }
                     .foregroundStyle((wf?.session?.isEmpty == false) ? DS.Ink.mintDeep : Color.secondary.opacity(0.5))
@@ -204,7 +194,7 @@ struct WorkflowRefCard: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(wf?.session?.isEmpty != false)
-                .accessibilityLabel("View the live execution of job \(wf?.title ?? wfID)")
+                .accessibilityLabel("查看单子 \(wf?.title ?? wfID) 的执行现场")
             }
         }
         .padding(.horizontal, 12)
@@ -222,7 +212,7 @@ struct WorkflowRefCard: View {
         }
         .task {
             guard tree == nil, !failed else { return }
-            // R1 P2-9: check the cross-card cache first — a hit skips the API; on a miss, write back after a successful fetch.
+            // R1 P2-9：先查跨卡缓存，命中不打 API；未命中拉取成功后回写。
             if let cached = WorkflowTreeCache.get(wfID) {
                 tree = cached
                 return
@@ -232,7 +222,7 @@ struct WorkflowRefCard: View {
                 tree = t
                 WorkflowTreeCache.put(wfID, t)
             } catch {
-                failed = true // not found (purged / typo): the card degrades to the bare ID + navigation still works
+                failed = true // 查不到（已清理/打错）：卡降级为纯 ID + 跳转仍可用
             }
         }
     }

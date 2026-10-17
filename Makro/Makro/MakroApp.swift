@@ -14,12 +14,10 @@ final class DeepLinkRouter: ObservableObject {
     static let shared = DeepLinkRouter()
     @Published var gate: GateLink?
     @Published var session: String?
-    /// Deep link to the Artifacts filtered view (board 06 "its artifacts" → Artifacts tab + producer filter).
+    /// Artifacts 过滤视图深链（板 06「它的产物」→ Artifacts tab + producer 筛选）。
     @Published var artifactsProducer: String?
-    /// Shared system draft (wf_030261e0a13a): the Share Extension drops it
-    /// into pending_share via the App Group; the main app reads it out on
-    /// activation and sets it here → ChatView fills the input box (the user
-    /// edits, then sends).
+    /// 系统分享草稿（wf_030261e0a13a）：Share Extension 经 App Group 落
+    /// pending_share，主 app 激活时读出置此 → ChatView 填输入框（用户编辑后发送）。
     @Published var shareDraft: String?
 }
 
@@ -34,13 +32,11 @@ struct MakroApp: App {
     var body: some Scene {
         WindowGroup {
             TabView(selection: $selectedTab) {
-                // Intake = the front door (09-29 conversation ruling: one
-                // sentence starts one job — clarify loop + read-only queries
-                // + confirmed intake via the startTask front door). Feedback
-                // is also a kind of intake (0929 user ruling); it merged into
-                // the intake chat and the feedback tab was retired.
+                // 发单 = 前门（09-29 对话定案：说一句话开一单——clarify
+                // loop + 只读查询 + 确认开单走 startTask 正门）。反馈也是
+                // 开单的一种（0929 用户裁决），随发单对话集成，反馈 tab 退役。
                 ChatView()
-                    .tabItem { Label("Intake", systemImage: "bubble.left") }
+                    .tabItem { Label("发单", systemImage: "bubble.left") }
                     .tag(0)
 
                 LifecycleView(deepLink: $gateLink)
@@ -55,15 +51,14 @@ struct MakroApp: App {
                     .tabItem { Label("Artifacts", systemImage: "doc.richtext") }
                     .tag(3)
 
-                // Settings = the last tab-bar item (board 02 visual ruling: globally reachable, no text).
+                // 设置 = tab 栏末项（板 02 视觉裁决：全局可达，无文字）。
                 NavigationStack { SettingsView() }
                     .tabItem { Label("", systemImage: "gearshape") }
                     .tag(4)
             }
             .onReceive(CallRouter.shared.$pendingStart) { wantsCall in
-                // Siri/Shortcuts "start call" → switch to the intake tab
-                // first (CallView's host); ChatView's double-consumption
-                // logic presents the full-screen call.
+                // Siri/Shortcuts「开始通话」→ 先切到发单 tab（CallView 的
+                // 宿主），ChatView 的双消费逻辑负责弹全屏通话。
                 if wantsCall { selectedTab = 0 }
             }
             .onReceive(DeepLinkRouter.shared.$gate) { link in
@@ -79,7 +74,7 @@ struct MakroApp: App {
                 selectedTab = 2
             }
             .onReceive(DeepLinkRouter.shared.$artifactsProducer) { producer in
-                // Board 06 cross-dimension chip: Agents' "its artifacts" → the Artifacts filtered view.
+                // 板 06 跨维芯片：Agents 的「它的产物」→ Artifacts 过滤视图。
                 guard let producer else { return }
                 selectedTab = 3
             }
@@ -87,10 +82,10 @@ struct MakroApp: App {
         .onChange(of: scenePhase) { newPhase in
             if newPhase == .active {
                 NotificationCenter.default.post(name: .makroReconnect, object: nil)
-                // Shared system draft (wf_030261e0a13a): the Share Extension
-                // drops it into the App Group; taken on activation → the
-                // ChatView input box (the user edits, then sends to start a
-                // job or discuss).
+                // 推送 token 前台补发（2026-10-15 修复）：冷启动上传失败不再静默丢。
+                AppDelegate.retryPendingTokenUpload()
+                // 系统分享草稿（wf_030261e0a13a）：Share Extension 落 App Group，
+                // 激活即取走 → ChatView 输入框（用户编辑后发送开单/讨论）。
                 if let group = UserDefaults(suiteName: "group.com.cybernagle.makro"),
                    let payload = group.dictionary(forKey: "pending_share"),
                    let text = payload["text"] as? String, !text.isEmpty {
@@ -116,8 +111,11 @@ private class LocalNetworkTrigger: NSObject, ObservableObject, NetServiceBrowser
 
 extension Notification.Name {
     static let makroReconnect = Notification.Name("makroReconnect")
-    /// Emitted by `CallRouter.requestEnd()`: even when CallView is not in
-    /// the foreground (app backgrounded / not presented), ChatViewModel can
-    /// still stop STT/TTS/audio at the model layer.
+    /// Config.switchProfile 实际切换了服务器地址（2026-10-16 多服务器 × APNs
+    /// 交叉轴）：AppDelegate 据此失效 token 去重记忆并向新服务器补传——去重
+    /// 键只有 token 不含服务器，不发这枪新服务器要等下一次后台→前台才有 token。
+    static let makroServerChanged = Notification.Name("makroServerChanged")
+    /// `CallRouter.requestEnd()` 发出：即使 CallView 不在前台（app 后台/
+    /// 未呈现），ChatViewModel 也能在模型层停掉 STT/TTS/音频。
     static let makroEndCall = Notification.Name("makroEndCall")
 }

@@ -1,11 +1,8 @@
 import SwiftUI
 
-// Feedback view (2026-09-28 bootstrapped): quick feedback to juli itself
-// from the phone — submissions go through the juli-service channel (juli-dev
-// handles it, a human reviews at the gate); the wall = a mirrored read-only
-// view of juli's own channel.
-// Scenario: continuous feedback while out or on the couch at home (a
-// recorded user need).
+// 反馈视图（2026-09-28 自举）：手机端随手给 juli 自己提反馈——提交走
+// juli-service 渠道（juli-dev 处理，闸门人审），墙=juli 自有渠道镜像只读。
+// 场景：出门在外/在家沙发上持续 feedback（用户实录诉求）。
 
 struct FeedbackView: View {
     @State private var body_ = ""
@@ -22,15 +19,15 @@ struct FeedbackView: View {
     var body: some View {
         NavigationStack {
             List {
-                // ---- Submit card ----
+                // ---- 提交卡 ----
                 Section {
-                    TextField("Ref (optional): page / ticket / element", text: $page)
+                    TextField("所指（可选）：页面/单号/元素", text: $page)
                         .autocorrectionDisabled()
                     TextEditor(text: $body_)
                         .frame(minHeight: 88)
                         .overlay(alignment: .topLeading) {
                             if body_.isEmpty {
-                                Text("Issue/suggestion: expected vs actual…")
+                                Text("问题/建议：期望 vs 实际…")
                                     .foregroundStyle(.tertiary)
                                     .padding(.top, 8)
                                     .padding(.leading, 4)
@@ -38,14 +35,14 @@ struct FeedbackView: View {
                             }
                         }
                     HStack {
-                        TextField("Name", text: $author)
+                        TextField("署名", text: $author)
                             .frame(maxWidth: 110)
                             .autocorrectionDisabled()
                         Spacer()
                         Button {
                             Task { await submit() }
                         } label: {
-                            if submitting { ProgressView() } else { Text("Submit & open job") }
+                            if submitting { ProgressView() } else { Text("提交并起单") }
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(body_.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || submitting)
@@ -53,8 +50,8 @@ struct FeedbackView: View {
                     if let result {
                         Label(
                             result.intakeStatus == "started"
-                                ? "Job opened: \(result.workflowId ?? result.recordId) — the repo stays untouched until gate approval"
-                                : "No job: \(result.intakeStatus) (the record is on the wall)",
+                                ? "已起单 \(result.workflowId ?? result.recordId)——闸门批准前不动仓"
+                                : "未起单：\(result.intakeStatus)（记录已落墙）",
                             systemImage: result.intakeStatus == "started" ? "checkmark.circle.fill" : "info.circle"
                         )
                         .font(.footnote)
@@ -66,25 +63,25 @@ struct FeedbackView: View {
                             .foregroundStyle(.red)
                     }
                 } header: {
-                    Text("juli feedback")
+                    Text("juli 自身反馈")
                 } footer: {
-                    Text("Into the juli-service channel: the job lands in the juli-dev session, three-part artifacts pass the gate, approval edits the repo.")
+                    Text("进 juli-service 渠道：单落 juli-dev 会话，三段工件过闸门，批准后改仓+commit。")
                 }
 
-                // ---- Feedback wall (juli's own channel) ----
+                // ---- 反馈墙（juli 自有渠道）----
                 Section {
                     if wallLoading {
-                        HStack { ProgressView(); Text("Loading…").foregroundStyle(.secondary) }
+                        HStack { ProgressView(); Text("加载中…").foregroundStyle(.secondary) }
                     } else {
                         if let wallError {
-                            // A load failure ≠ no records: the error is explicitly visible; existing records still display.
-                            Label("Load failed: \(wallError) (pull to retry)", systemImage: "exclamationmark.triangle.fill")
+                            // 加载失败≠暂无记录：错误显式可见；存量记录照常展示。
+                            Label("加载失败：\(wallError)（下拉可重试）", systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
                                 .foregroundStyle(.red)
                         }
                         if wall.isEmpty {
                             if wallError == nil {
-                                Text("No records yet").foregroundStyle(.secondary)
+                                Text("还没有记录").foregroundStyle(.secondary)
                             }
                         } else {
                             ForEach(wall.filter { showReplies || $0.replyTo.isEmpty }) { rec in
@@ -97,14 +94,14 @@ struct FeedbackView: View {
                                         .background(statusTint(rec.status).opacity(0.15), in: Capsule())
                                         .foregroundStyle(statusTint(rec.status))
                                     if rec.replyTo.isEmpty != true {
-                                        Text("Reply").font(.caption2).foregroundStyle(.secondary)
+                                        Text("答复").font(.caption2).foregroundStyle(.secondary)
                                     }
                                     if rec.originKind == "agent" || rec.originKind == "engine" {
                                         Text("AI").font(.caption2.weight(.semibold))
                                             .padding(.horizontal, 5).padding(.vertical, 2)
                                             .background(Capsule().fill(.secondary.opacity(0.15)))
                                     }
-                                    Text((rec.source ?? "") == "juli-site" ? "Site" : "Local")
+                                    Text((rec.source ?? "") == "juli-site" ? "官网" : "本地")
                                         .font(.caption2).foregroundStyle(.tertiary)
                                     Spacer()
                                     Text(shortTime(rec.created)).font(.caption2).foregroundStyle(.tertiary)
@@ -119,13 +116,13 @@ struct FeedbackView: View {
                             }
                         }
                     }
-                    Toggle("Show reply", isOn: $showReplies)
+                    Toggle("显示答复", isOn: $showReplies)
                         .font(.footnote)
                 } header: {
-                    Text("Feedback wall (juli channel)")
+                    Text("反馈墙（juli 渠道）")
                 }
             }
-            .navigationTitle("Feedback")
+            .navigationTitle("反馈")
             .refreshable { await loadWall() }
             .task { await loadWall() }
         }
@@ -163,23 +160,22 @@ struct FeedbackView: View {
             wall = Array(records.prefix(50))
             wallError = nil
         } catch {
-            // A failure does not clear existing records (old data stays
-            // viewable), but the error must be visible — the wall must never
-            // masquerade as "no records yet".
+            // 失败不清空存量记录（旧数据仍可看），但错误必须可见，
+            // 不得让墙冒充「暂无记录」。
             wallError = error.localizedDescription
         }
     }
 
     private func statusTint(_ s: String) -> Color {
         switch s {
-        case "New": return .blue
-        case "Adopted": return .orange
-        case "Done": return .green
+        case "新建": return .blue
+        case "已采纳": return .orange
+        case "已完成": return .green
         default: return .secondary
         }
     }
 
-    /// "2026-09-28T12:08:30.665Z" → "09-28 20:08" (Beijing time).
+    /// "2026-09-28T12:08:30.665Z" → "09-28 20:08"（北京时间）。
     private func shortTime(_ iso: String) -> String {
         var comps = String(iso.prefix(16)).split(separator: "T")
         guard comps.count == 2 else { return iso }

@@ -9,6 +9,8 @@ struct SettingsView: View {
     @State private var revealAzureKey = false
     @State private var copied = false
     @State private var showInvalidURL = false
+    @State private var showAddProfile = false
+    @State private var confirmDeleteProfile: ServerProfile?
     @Environment(\.dismiss) private var dismiss
 
     enum TestResult: Equatable {
@@ -19,15 +21,15 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                // Groups (board 12 · settings & notifications): connection / voice / notifications
-                groupLabel("Connection")
+                // 分组（板 12 · 设置与通知）：连接 / 语音 / 通知
+                groupLabel("连接")
                 serverCard
                 authCard
-                groupLabel("Voice — intake & intervene transcription")
+                groupLabel("语音 · 发单与插话转写")
                 azureCard
                 voiceCard
                 quotaCard
-                groupLabel("Notifications")
+                groupLabel("通知")
                 notifyCard
                 testCard
                 infoCard
@@ -41,10 +43,8 @@ struct SettingsView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Save") {
-                    // serverURL validation (2026-09-20 P2): reject the save
-                    // with a notice on parse failure — a bad address landing
-                    // in UserDefaults crashes at launch, and only deleting
-                    // the app recovers.
+                    // serverURL 校验（2026-09-20 P2）：解析失败拒存并提示——
+                    // 坏地址落 UserDefaults 后启动即崩，只能删 App 恢复。
                     guard config.isServerURLValid else {
                         showInvalidURL = true
                         return
@@ -57,15 +57,29 @@ struct SettingsView: View {
                 .foregroundStyle(DS.Ink.mint)
             }
         }
-        .alert("Invalid server address", isPresented: $showInvalidURL) {
-            Button("OK", role: .cancel) {}
+        .alert("服务器地址无效", isPresented: $showInvalidURL) {
+            Button("好", role: .cancel) {}
         } message: {
-            Text("Enter an address like https://host:port (no spaces or invalid characters).")
+            Text("请填写形如 https://host:port 的地址（不能含空格或非法字符）。")
         }
         .onAppear { quotaTracker.reload() }
+        .sheet(isPresented: $showAddProfile) {
+            AddProfileSheet()
+        }
+        .alert("Delete Profile?", isPresented: Binding(
+            get: { confirmDeleteProfile != nil },
+            set: { if !$0 { confirmDeleteProfile = nil } }
+        ), presenting: confirmDeleteProfile) { profile in
+            Button("Delete", role: .destructive) {
+                config.deleteProfile(profile.id)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { profile in
+            Text("Delete \"\(profile.name)\" and its saved password.")
+        }
     }
 
-    // MARK: - Group label (board 12 group headers: orange mono uppercase)
+    // MARK: - Group label（板 12 分组头：橘色 mono 大写）
 
     private func groupLabel(_ text: String) -> some View {
         Text(text)
@@ -74,7 +88,7 @@ struct SettingsView: View {
             .padding(.leading, 2)
     }
 
-    // MARK: - Notifications (board 12: push section)
+    // MARK: - Notifications（板 12：推送段）
 
     private var notifyCard: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -82,13 +96,13 @@ struct SettingsView: View {
                 Image(systemName: "bell.badge")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.tertiary)
-                Text("Gate waiting / session done")
+                Text("闸门等待 / 会话完成 推送")
                     .font(DS.text(13, .regular))
                     .foregroundStyle(.primary)
                 Spacer()
                 Circle().fill(DS.Ink.done).frame(width: 8, height: 8)
             }
-            Text("Tapping a push deep-links to the casefile/terminal; returning to the app clears notifications and the badge.")
+            Text("点推送直达对应案卷/终端（深链）；回前台自动清空通知中心与角标。")
                 .font(DS.text(11, .regular))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -103,7 +117,17 @@ struct SettingsView: View {
 
     private var serverCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionLabel("Server URL")
+            sectionLabel("Server")
+            // 多服务器 Profile（2026-10-16）：点选即切换（立即生效并重连），
+            // 长按可删除；+ 新建。下方 URL/密码编辑的是当前激活的 profile。
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(config.profiles) { profile in
+                        profileChip(profile)
+                    }
+                    addProfileChip
+                }
+            }
             HStack(spacing: 10) {
                 Image(systemName: "link")
                     .font(.system(size: 13, weight: .semibold))
@@ -144,6 +168,54 @@ struct SettingsView: View {
         .background(DS.Canvas.card)
         .clipShape(RoundedRectangle(cornerRadius: DS.R.lg, style: .continuous))
         .glassBorder(DS.R.lg)
+    }
+
+    // MARK: - Profile chips（多服务器）
+
+    private func profileChip(_ profile: ServerProfile) -> some View {
+        let active = profile.id == config.activeProfileID
+        return Button {
+            config.switchProfile(to: profile.id)
+        } label: {
+            HStack(spacing: 6) {
+                if active {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                Text(profile.name)
+                    .font(DS.text(12, .semibold))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(active ? DS.Ink.mint.opacity(0.16) : DS.Canvas.inset)
+            .foregroundStyle(active ? DS.Ink.mint : .secondary)
+            .clipShape(Capsule())
+        }
+        .contextMenu {
+            if config.profiles.count > 1 {
+                Button(role: .destructive) {
+                    confirmDeleteProfile = profile
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+    }
+
+    private var addProfileChip: some View {
+        Button {
+            showAddProfile = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(DS.Canvas.inset)
+                .clipShape(Capsule())
+        }
+        .accessibilityLabel("Add Server")
     }
 
     // MARK: - Auth
@@ -245,12 +317,12 @@ struct SettingsView: View {
 
     private var voiceCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionLabel("Voice")
+            sectionLabel("语音交互")
             HStack(spacing: 10) {
                 Image(systemName: "checkmark.message")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.tertiary)
-                TextField("send it,i am done,OK,that is all", text: $config.commitPhrases)
+                TextField("请发送,我说完了,OK,好", text: $config.commitPhrases)
                     .font(DS.mono(13, .regular))
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -265,7 +337,7 @@ struct SettingsView: View {
                 Image(systemName: "waveform.badge.checkmark")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.tertiary)
-                Text("VAD smart gating (saves quota)")
+                Text("VAD 智能降噪（省额度）")
                     .font(DS.text(13, .regular))
                     .foregroundStyle(.primary)
                 Spacer()
@@ -278,7 +350,7 @@ struct SettingsView: View {
             .clipShape(RoundedRectangle(cornerRadius: DS.R.md, style: .continuous))
             .glassBorder(DS.R.md)
 
-            Text("When on, speech-recognition quota is consumed only while you are talking; the turn is sent after a commit phrase (e.g. ‘send it’).")
+            Text("开启后：只有检测到说话时才消耗语音识别额度；说完结束语（如「请发送」）才发送。")
                 .font(DS.text(11, .regular))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -294,27 +366,27 @@ struct SettingsView: View {
     private var quotaCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                sectionLabel("This month (F0 free tier)")
+                sectionLabel("本月额度 (F0 免费层)")
                 Spacer()
                 Button {
                     quotaTracker.reset()
                 } label: {
-                    Text("Reset")
+                    Text("重置")
                         .font(DS.micro(10, .semibold))
                         .foregroundStyle(.secondary)
                 }
             }
 
             quotaRow(
-                label: "Text-to-speech (TTS)",
+                label: "语音合成 (TTS)",
                 used: "\(quotaTracker.quota.ttsCharsUsed)",
-                limit: "\(SpeechQuota.ttsCap) chars",
+                limit: "\(SpeechQuota.ttsCap) 字符",
                 ratio: quotaTracker.quota.ttsRatio
             )
             quotaRow(
-                label: "Speech-to-text (STT)",
+                label: "语音识别 (STT)",
                 used: String(format: "%.1f", Double(quotaTracker.quota.sttSecondsUsed) / 3600.0),
-                limit: String(format: "%.1f", Double(SpeechQuota.sttCapSeconds) / 3600.0) + " h",
+                limit: String(format: "%.1f", Double(SpeechQuota.sttCapSeconds) / 3600.0) + " 小时",
                 ratio: quotaTracker.quota.sttRatio
             )
         }
@@ -425,12 +497,11 @@ struct SettingsView: View {
     // MARK: - Info
 
     private var infoCard: some View {
-        // Version row (board 12): "Makro 1.1 (2) · juli-service" — the version
-        // comes from the Bundle, and the server hint shares the line (the old
-        // English placeholder copy was replaced per design).
+        // 版本行（板 12）：「Makro 1.1 (2) · juli-service」——版本号取 Bundle，
+        // 服务器提示并入一行（原英文占位文案按设计替换）。
         HStack(spacing: 6) {
             Text("Makro \(appVersion) (\(buildNumber)) · juli-service")
-            Text("· server must be reachable")
+            Text("· 服务器需可达")
         }
         .font(DS.mono(11))
         .foregroundStyle(.tertiary)
@@ -486,5 +557,72 @@ struct SettingsView: View {
             }
             withAnimation(DS.snappy) { isTesting = false }
         }
+    }
+}
+
+/// 新建服务器 Profile（2026-10-16 多服务器）：名称可空（回退 host），URL 复用
+/// Config 归一化校验，密码进该 profile 的 Keychain 槽位。添加成功即切换。
+private struct AddProfileSheet: View {
+    @ObservedObject private var config = Config.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var url = ""
+    @State private var password = ""
+    @State private var showInvalid = false
+    @State private var showDuplicate = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Name") {
+                    TextField("e.g. Review", text: $name)
+                }
+                Section("Server URL") {
+                    TextField("https://host:port", text: $url)
+                        .font(DS.mono(13, .regular))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+                Section("Password") {
+                    SecureField("Password", text: $password)
+                        .font(DS.mono(13, .regular))
+                }
+            }
+            .navigationTitle("Add Server")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        guard let valid = Config.normalizedHTTPURL(url) else {
+                            showInvalid = true
+                            return
+                        }
+                        // 同 URL 已存在 → 显式提示而非静默重复添加（2026-10-16 P2）。
+                        guard !config.profiles.contains(where: { $0.serverURL == valid }) else {
+                            showDuplicate = true
+                            return
+                        }
+                        config.addProfile(name: name, serverURL: url, password: password)
+                        dismiss()
+                    }
+                    .font(DS.text(15, .semibold))
+                    .foregroundStyle(DS.Ink.mint)
+                }
+            }
+            .alert("Invalid Server URL", isPresented: $showInvalid) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Enter an address like https://host:port")
+            }
+            .alert("Server Already Added", isPresented: $showDuplicate) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("A profile with this URL already exists.")
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }

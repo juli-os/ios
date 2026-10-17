@@ -1,12 +1,9 @@
 import SwiftUI
 
-/// Artifacts two-column cards (finalized 2026-10-01, neo's option three ·
-/// full-element version): every card carries all six layers — icon +
-/// relative time / two-line filename body / session badge + size / light
-/// divider / case + terminal chips directly tappable. Not one original
-/// element lost; one font-size step smaller overall.
-/// Filter layer: search + type chips + session dropdown (the horizontally
-/// scrolling session chips were retired).
+/// Artifacts 双列卡片（2026-10-01 定稿，neo 选型方案三·全要素版）：
+/// 每卡六层全要素——图标+相对时间 / 文件名两行主体 / 会话徽章+大小 /
+/// 浅分隔线 / 案卷+终端芯片直接可点。原有元素一个不丢，字号整体缩一档。
+/// 筛选层：搜索 + 类型 chips + 会话下拉（横滚 session chips 退役）。
 /// Both filters are client-side against a single full fetch, so switching
 /// is instant. Tap card to preview; chips navigate without leaving the list.
 struct ArtifactsView: View {
@@ -49,13 +46,12 @@ struct ArtifactsView: View {
                         .tracking(-0.3)
                         .foregroundStyle(.primary)
                 }
-                // Refresh button retired (board 02 gesture unification): pull down to refresh; no primary action top-right on this page.
+                // 刷新按钮退役（板 02 手势统一）：下拉即刷；本页右上无主动作。
             }
             .pullToRefresh { await vm.loadArtifacts() }
             .onReceive(DeepLinkRouter.shared.$artifactsProducer) { producer in
-                // Board 06 cross-dimension chip landed: the Agents card's
-                // "its artifacts" → filtered here by producer (session name).
-                // Clear the one-shot value so it cannot pollute on the way back.
+                // 板 06 跨维芯片落地：Agents 卡的「它的产物」→ 这里按
+                // producer（会话名）过滤。清掉一次性值防回头污染。
                 guard let producer else { return }
                 vm.selectedSession = producer
                 DeepLinkRouter.shared.artifactsProducer = nil
@@ -120,7 +116,7 @@ struct ArtifactsView: View {
             Button {
                 vm.selectedSession = nil
             } label: {
-                Label("All sessions", systemImage: vm.selectedSession == nil ? "checkmark" : "tray.full")
+                Label("全部会话", systemImage: vm.selectedSession == nil ? "checkmark" : "tray.full")
             }
             ForEach(vm.sessionCounts) { sc in
                 Button {
@@ -133,7 +129,7 @@ struct ArtifactsView: View {
             HStack(spacing: 6) {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .font(.system(size: 13, weight: .medium))
-                Text(vm.selectedSession.flatMap { "\($0)" } ?? "Session")
+                Text(vm.selectedSession.flatMap { "\($0)" } ?? "会话")
                     .font(DS.text(13, .semibold))
                     .lineLimit(1)
                     .frame(maxWidth: 90)
@@ -186,24 +182,23 @@ struct ArtifactsView: View {
             skeletonGrid
         } else if let err = vm.error {
             stateVisual("exclamationmark.triangle", tint: DS.Ink.rose,
-                        title: "Something went wrong", sub: err)
+                        title: "出了点问题", sub: err)
         } else if vm.artifacts.isEmpty {
             stateVisual("doc.richtext", tint: DS.Ink.mint,
                         title: "No artifacts yet",
-                        sub: "AI-generated HTML and video land here.\nAll sessions listed by default.")
+                        sub: "AI 生成的 HTML / 视频会出现在这里。\n默认列出所有 session。")
         } else if vm.filtered.isEmpty {
             stateVisual("magnifyingglass", tint: DS.Ink.zinc,
-                        title: "No matches",
-                        sub: "Try other keywords, or change the type/session filter.")
+                        title: "无匹配结果",
+                        sub: "试试其他关键字,或切换类型/会话筛选。")
         } else {
             cardGrid
         }
     }
 
     private var cardGrid: some View {
-        // Final (2026-10-01): two-column cards with all elements, no time
-        // grouping — the time axis is expressed inside the card by "relative
-        // time"; the list is purely mtime descending.
+        // 定稿（2026-10-01）：双列卡片全要素，无时间分组——分组轴由
+        // 「相对时间」在卡内表达，列表纯 mtime 倒序。
         LazyVGrid(columns: columns, spacing: 10) {
             ForEach(Array(vm.filtered.enumerated()), id: \.element.id) { idx, a in
                 ArtifactCard(
@@ -304,7 +299,7 @@ private struct TypeChip: View {
     }
 }
 
-// MARK: - Artifact card (final six layers: all elements · one size smaller)
+// MARK: - Artifact card（定稿六层：全要素·缩小一档）
 
 private struct ArtifactCard: View {
     let artifact: Artifact
@@ -317,7 +312,7 @@ private struct ArtifactCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // ① Top row: type icon + relative time
+            // ① 顶行：类型图标 + 相对时间
             HStack(alignment: .center) {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(tint.opacity(0.14))
@@ -333,7 +328,7 @@ private struct ArtifactCard: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
-            // ② Two-line filename body (core of the final: long names mostly fully visible)
+            // ② 文件名两行主体（定稿核心：长名基本看全）
             Text(artifact.name)
                 .font(DS.text(12.5, .semibold))
                 .foregroundStyle(.primary)
@@ -341,20 +336,17 @@ private struct ArtifactCard: View {
                 .multilineTextAlignment(.leading)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
-            // ③④⑤ The small-label layer was retired wholesale
-            // (wf_8c1894d4bec0 user rework: 8.5pt session badge / case chip /
-            // terminal chip crammed together carried no readable information)
-            // — replaced by one readable "owning job" line: a status-colored
-            // dot + the job title (full text from the server join, two
-            // readable lines); tapping the row opens the case detail; without
-            // an owning job (legacy) it degrades to small size text.
+            // ③④⑤ 小标签层整体退役（wf_8c1894d4bec0 用户回修：挤在一起的
+            // 会话徽章/案卷芯片/终端芯片 8.5pt 小字看不出信息）——换一行看得
+            // 清的「所属单」：状态色点 + 单标题（服务端 join 全文，两行可读），
+            // 点行开案卷详情；无所属单（legacy）退化为大小小字。
             if let wf = artifact.workflow ?? legacyCaseRef {
                 Button { onOpenCase(wf.id) } label: {
                     HStack(alignment: .center, spacing: 6) {
                         Circle()
                             .fill(Self.statusColor(wf.status))
                             .frame(width: 7, height: 7)
-                        Text(wf.title.isEmpty ? "Job" : wf.title)
+                        Text(wf.title.isEmpty ? "所属单" : wf.title)
                             .font(DS.text(12, .medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
@@ -368,7 +360,7 @@ private struct ArtifactCard: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Open job \(wf.title)")
+                .accessibilityLabel("打开所属单 \(wf.title)")
             } else {
                 Text(Self.formatSize(artifact.size))
                     .font(DS.mono(9.5, .regular))
@@ -387,7 +379,7 @@ private struct ArtifactCard: View {
         }
     }
 
-    /// Legacy fallback: without the server join, assemble the ref from the local caseTitles map (id=session, i.e. the wfId basis).
+    /// legacy 兜底：无服务端 join 时用本地 caseTitles 映射拼 ref（id=session 即 wfId 口径）。
     private var legacyCaseRef: ArtifactWorkflowRef? {
         guard let t = caseTitle, !t.isEmpty else { return nil }
         return ArtifactWorkflowRef(id: artifact.session, title: t, status: "completed")
@@ -403,7 +395,7 @@ private struct ArtifactCard: View {
         }
     }
 
-    // Final: relative time — today HH:mm / yesterday / older MM-dd (with grouping retired, the time axis lives inside the card)
+    // 定稿：相对时间——今天 HH:mm / 昨天 / 更早 MM-dd（分组退役后卡内表达时间轴）
     static func relativeTime(_ ts: Int64) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(ts))
         let cal = Calendar.current
@@ -411,7 +403,7 @@ private struct ArtifactCard: View {
             let f = DateFormatter(); f.dateFormat = "HH:mm"
             return f.string(from: date)
         }
-        if cal.isDateInYesterday(date) { return "Yesterday" }
+        if cal.isDateInYesterday(date) { return "昨天" }
         let f = DateFormatter(); f.dateFormat = "MM-dd"
         return f.string(from: date)
     }
@@ -424,7 +416,7 @@ private struct ArtifactCard: View {
     }
 }
 
-// MARK: - Skeleton card (two-column placeholder)
+// MARK: - Skeleton card（双列占位）
 
 private struct ArtifactCardSkeleton: View {
     var body: some View {
@@ -477,9 +469,9 @@ final class ArtifactViewModel: ObservableObject {
 
         var label: String {
             switch self {
-            case .all: return "All"
-            case .html: return "Pages"
-            case .video: return "Videos"
+            case .all: return "全部"
+            case .html: return "网页"
+            case .video: return "视频"
             }
         }
 
@@ -498,14 +490,14 @@ final class ArtifactViewModel: ObservableObject {
     @Published private(set) var artifacts: [Artifact] = []
     @Published private(set) var isLoading = false
     @Published var error: String?
-    /// Case-title mapping: the hub maps cases/<wfId> to session=wfId — the
-    /// badge shows the case name instead of a cryptic id (board 08).
+    /// 案卷标题映射：中央库把 cases/<wfId> 映射为 session=wfId——徽章显示
+    /// 案卷名而非天书 id（板 08）。
     @Published private(set) var caseTitles: [String: String] = [:]
 
     private let api = APIClient.shared
 
     // Client-side filter: session menu + type chip + name search, instant (no network).
-    /// searched = session + name search (the count basis for type chips, unaffected by the type filter)
+    /// searched = 会话 + 名称搜索（类型 chips 的计数基准，不受类型筛选影响）
     var searched: [Artifact] {
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         return artifacts.filter { a in
@@ -521,7 +513,7 @@ final class ArtifactViewModel: ObservableObject {
         }
     }
 
-    /// Counts for the type chips (based on the "session + search" result, unaffected by the chips' own filter).
+    /// 类型 chips 的计数（以「会话+搜索」结果为基准，不受类型自身筛选影响）。
     func count(for tf: TypeFilter) -> Int {
         switch tf {
         case .all: return searched.count
@@ -543,7 +535,7 @@ final class ArtifactViewModel: ObservableObject {
     var isAllSessions: Bool { selectedSession == nil }
 
     func loadArtifacts() async {
-        // Board 08: wf id → case-title mapping (data source for the case-name chip).
+        // 板 08：wf id → 案卷标题映射（案卷名芯片的数据源）。
         Task {
             if let wfs = try? await APIClient.shared.fetchWorkflows(limit: 500) {
                 let map = Dictionary(uniqueKeysWithValues: wfs.map { ($0.id, $0.title) })

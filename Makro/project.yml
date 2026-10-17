@@ -22,16 +22,18 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Makro/Makro.entitlements
         IPHONEOS_DEPLOYMENT_TARGET: "26.0"
         PRODUCT_BUNDLE_IDENTIFIER: com.cybernagle.Makro
-        MARKETING_VERSION: "1.16.0"
-        CURRENT_PROJECT_VERSION: "19"
+        MARKETING_VERSION: "1.16.1"
+        CURRENT_PROJECT_VERSION: "22"
         SWIFT_VERSION: "5.9"
-        TARGETED_DEVICE_FAMILY: "1,2"
+        TARGETED_DEVICE_FAMILY: "1"
         DEVELOPMENT_TEAM: ""
         CODE_SIGN_IDENTITY: "Apple Development"
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-    capabilities:
-      - com.apple.Push
+    # 注意（2026-10-15 通知全灭排查）：xcodegen 不支持 SystemCapabilities/
+    # capabilities 任何写法（二进制无此概念，静默忽略）——pbxproj 永远没有 Push
+    # 能力声明。推送权限完全靠 Makro.entitlements 的 aps-environment 键 + 描述文件
+    # 允许；发版断言（scripts/ios-testflight.sh 第 3 步）实读 ipa 签名防再被剥。
     dependencies:
       - target: MakroShare
         embed: true
@@ -48,10 +50,10 @@ targets:
         CODE_SIGN_ENTITLEMENTS: MakroShare/MakroShare.entitlements
         IPHONEOS_DEPLOYMENT_TARGET: "26.0"
         PRODUCT_BUNDLE_IDENTIFIER: com.cybernagle.Makro.Share
-        MARKETING_VERSION: "1.16.0"
-        CURRENT_PROJECT_VERSION: "19"
+        MARKETING_VERSION: "1.16.1"
+        CURRENT_PROJECT_VERSION: "22"
         SWIFT_VERSION: "5.9"
-        TARGETED_DEVICE_FAMILY: "1,2"
+        TARGETED_DEVICE_FAMILY: "1"
         DEVELOPMENT_TEAM: ""
         CODE_SIGN_IDENTITY: "Apple Development"
         SKIP_INSTALL: "YES"

@@ -1,8 +1,6 @@
-// Siri / lock-screen call entry (recovered as-is from the Makro archive
-// repo 4a4a625^ on 09-29).
-// CallRouter is the single source of truth for Siri/Shortcuts call control:
-// the intent sets a @Published flag before the app UI is necessarily in
-// place; cold-launch ordering is more robust than a NotificationCenter post.
+// Siri / 锁屏通话入口（09-29 从 Makro 存档仓 4a4a625^ 原样捞回）。
+// CallRouter 是 Siri/Shortcuts 通话控制的单一事实源：intent 在 app UI 未必
+// 就位时先置 @Published 标志，冷启动排序比 NotificationCenter post 稳。
 
 import AppIntents
 import Foundation
@@ -45,7 +43,7 @@ final class CallRouter: ObservableObject {
 
 // MARK: - "Start call" intent
 
-/// "Hey Siri, call Makro" → foregrounds the app, switches to the intake tab,
+/// "Hey Siri, call Makro" → foregrounds the app, switches to the 发单 tab,
 /// and presents the full-screen `CallView`. The existing Azure STT/TTS + VAD
 /// pipeline takes over from there.
 struct StartCallIntent: AppIntent {
@@ -95,16 +93,16 @@ struct MakroShortcuts: AppShortcutsProvider {
                 "Start a \(.applicationName) call",
                 "Start \(.applicationName) call",
                 "Start a call with \(.applicationName)",
-                // Chinese phrases — CAVEAT: the app's dev region is `en` and there
+                // 中文短语 — CAVEAT: the app's dev region is `en` and there
                 // is no zh-Hans string catalog yet, so these phrases train
                 // under the `en` SSU corpus (not `zh`). They are NOT
-                // voice-matchable on Chinese Siri — they only surface in the
+                // voice-matchable on 中文 Siri — they only surface in the
                 // Shortcuts app as runnable phrases. Add a zh-Hans
                 // Localizable.strings to make them voice-trained.
-                // Avoids "call up" phrasing (system dialer).
-                "Start a \(.applicationName) call",
-                "Start \(.applicationName) call",
-                "\(.applicationName) call"
+                // 避开"打给"（系统拨号）。
+                "用 \(.applicationName) 开始通话",
+                "开始 \(.applicationName) 通话",
+                "\(.applicationName) 通话"
             ],
             shortTitle: "Start Call",
             systemImageName: "phone.fill"
@@ -118,13 +116,13 @@ struct MakroShortcuts: AppShortcutsProvider {
                 "End \(.applicationName) call",
                 "End the \(.applicationName) call",
                 "Stop \(.applicationName) call",
-                // Chinese phrases — same caveat as the start-call zh phrases: they
-                // train under `en` (no zh-Hans catalog yet), so Chinese Siri
+                // 中文短语 — same caveat as the start-call zh phrases: they
+                // train under `en` (no zh-Hans catalog yet), so 中文 Siri
                 // won't voice-match them; Shortcuts-app-visible only until a
                 // zh-Hans Localizable.strings is added.
-                // Avoids "hang up" (a system telephony word).
-                "End \(.applicationName) call",
-                "Stop \(.applicationName) call"
+                // 避开"挂断"（系统挂断词）。
+                "结束 \(.applicationName) 通话",
+                "停止 \(.applicationName) 通话"
             ],
             shortTitle: "End Call",
             systemImageName: "phone.down.fill"

@@ -6,12 +6,11 @@ target 'Makro' do
 end
 
 post_install do |installer|
-  # Xcode 27 rejects sub-15.0 deployment targets outright (pod ships 11.0).
+  # Xcode 27 支持区间 15.0+：pod 自带低 deployment target（Azure Speech=11.0）
+  # 归档直接报错（2026-10-10 build 9 首撞）——统一抬到下限 15.0。
   installer.pods_project.targets.each do |t|
-    t.build_configurations.each do |cfg|
-      if cfg.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 15.0
-        cfg.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      end
+    t.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
     end
   end
 end

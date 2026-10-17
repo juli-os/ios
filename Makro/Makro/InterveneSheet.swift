@@ -1,11 +1,9 @@
 import SwiftUI
 
-// Intervene-to-correct sheet (Penpot board 11 · makro-iphone).
-// Talking to a drifting agent beats typing — voice + an editable
-// transcript; delivery goes through the first-class intervene endpoint,
-// fully traced (intervention history / activity timeline / audit events /
-// heartbeat renewal). Errors show in place, not in the list banner hidden
-// behind the sheet.
+// 插话纠偏 sheet（Penpot 板 11 · makro-iphone）。
+// 对着跑偏的 agent 说话比打字自然——语音 + 可编辑转写；投递走一等
+// intervene 端点，全程留痕（干预史/活动时间线/审计事件/心跳续命）。
+// 错误就地显示，不落被 sheet 挡住的列表横幅。
 
 struct InterveneSheet: View {
     @ObservedObject var vm: LifecycleViewModel
@@ -26,7 +24,7 @@ struct InterveneSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("\(step.seq). \(step.displayTitle) · \(step.status == "running" ? "Running" : step.status)")
+                    Text("\(step.seq). \(step.displayTitle) · \(step.status == "running" ? "执行中" : step.status)")
                         .font(DS.mono(11)).foregroundStyle(.secondary)
 
                     TextEditor(text: $text)
@@ -38,7 +36,7 @@ struct InterveneSheet: View {
                         .clipShape(RoundedRectangle(cornerRadius: DS.R.md, style: .continuous))
 
                     if isListening, case .listening(let partial) = speech.listenState, !partial.isEmpty {
-                        Text("Listening…\(partial.suffix(10))")
+                        Text("正在听…\(partial.suffix(10))")
                             .font(DS.mono(10)).foregroundStyle(DS.Ink.mint)
                     }
                     if let errorText {
@@ -50,24 +48,24 @@ struct InterveneSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: DS.R.sm))
                     }
 
-                    Text("Traced: replayable intervention history · activity timeline · audit events · heartbeat")
+                    Text("留痕：干预史（可回放）· 活动时间线 · 审计事件 · 心跳续命")
                         .font(DS.mono(9.5)).foregroundStyle(.secondary)
                 }
                 .padding(16)
             }
             .background(DS.Canvas.app.ignoresSafeArea())
             .safeAreaInset(edge: .bottom) { micBar }
-            .navigationTitle("Intervene")
+            .navigationTitle("插话纠偏")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { speech.stopListening(); dismiss() }
+                    Button("取消") { speech.stopListening(); dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         send()
                     } label: {
-                        if busy { ProgressView().controlSize(.small) } else { Text("Deliver →") }
+                        if busy { ProgressView().controlSize(.small) } else { Text("递交 →") }
                     }
                     .font(DS.text(14, .semibold))
                     .disabled(busy || text.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -89,8 +87,8 @@ struct InterveneSheet: View {
             }
             .background(Circle().fill(isListening ? DS.Ink.mint : DS.Ink.mint.opacity(0.12)))
             .breathing(isListening)
-            .accessibilityLabel(isListening ? "Stop recording" : "Voice input")
-            Text("Voice or typing — the transcript is editable")
+            .accessibilityLabel(isListening ? "结束录音" : "语音输入")
+            Text("语音或手打 · 转写可修")
                 .font(DS.mono(9.5)).foregroundStyle(.secondary)
             Spacer()
         }
@@ -101,7 +99,7 @@ struct InterveneSheet: View {
     private func toggleMic() {
         if isListening { speech.stopListening(); return }
         guard speech.isConfigured else {
-            errorText = "Voice not configured (Settings → Voice) — typing still works"
+            errorText = "语音未配置（设置 → 语音）· 手打仍可用"
             return
         }
         speech.onRecognized = { piece in
@@ -129,7 +127,7 @@ struct InterveneSheet: View {
     }
 }
 
-// MARK: - Amend-inputs sheet (amend: failed steps missing input; the engine prefills candidate values)
+// MARK: - 补料 sheet（amend：缺 input 的失败步，引擎预填候选值）
 
 import SwiftUI
 
@@ -148,15 +146,15 @@ struct AmendSheet: View {
         NavigationStack {
             Group {
                 if loading {
-                    ProgressView("Loading candidates…")
+                    ProgressView("拉取候选值…")
                 } else if rows.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: "tray").font(.system(size: 26)).foregroundStyle(.tertiary)
-                        Text("No amendable inputs on this step").font(DS.text(13)).foregroundStyle(.secondary)
+                        Text("该步骤没有可补的输入项").font(DS.text(13)).foregroundStyle(.secondary)
                     }
                 } else {
                     List {
-                        Section("Amend inputs · auto-rerun after submit") {
+                        Section("补料 · 修正输入后自动重跑") {
                             ForEach(rows) { row in
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
@@ -164,7 +162,7 @@ struct AmendSheet: View {
                                         Spacer()
                                         Text(row.source).font(DS.mono(9)).foregroundStyle(.tertiary)
                                     }
-                                    TextField("Candidate: \(row.value)", text: Binding(
+                                    TextField("候选：\(row.value)", text: Binding(
                                         get: { edits[row.key] ?? row.value },
                                         set: { edits[row.key] = $0 }))
                                         .font(DS.mono(12))
@@ -178,15 +176,15 @@ struct AmendSheet: View {
                     }
                 }
             }
-            .navigationTitle("Amend · \(step.seq). \(step.displayTitle)")
+            .navigationTitle("补料 · \(step.seq). \(step.displayTitle)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .topBarLeading) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         submit()
                     } label: {
-                        if busy { ProgressView().controlSize(.small) } else { Text("Submit & rerun →") }
+                        if busy { ProgressView().controlSize(.small) } else { Text("提交重跑 →") }
                     }
                     .disabled(loading || busy || rows.isEmpty)
                 }

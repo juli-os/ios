@@ -2,14 +2,12 @@ import SwiftUI
 
 // Terminal detail: the live pane + input bar for ONE session. No longer a
 // tab of its own — it is the shared destination every agent/session row in
-// the Agents tab pushes into (and Flow's "open in terminal" full-screen cover).
+// the Agents tab pushes into (and Flow's "在终端打开" full-screen cover).
 
 struct TerminalDetailView: View {
     let sessionName: String
-    // Entering via push, the system back button is the exit; entering via
-    // fullScreenCover has no system gesture, so it must carry its own close
-    // — otherwise the user is locked inside the terminal and can only kill
-    // the app.
+    // Push 进入时系统返回键就是出口；fullScreenCover 进入时没有系统手势，
+    // 必须自带关闭——否则用户被锁在终端里只能杀 App。
     var onClose: (() -> Void)? = nil
     @StateObject private var terminalVM = TerminalViewModel()
     @State private var inputText = ""
@@ -19,21 +17,19 @@ struct TerminalDetailView: View {
     @State private var current = ""
     @State private var showDrawer = false
     @State private var drawerSessions: [Session] = []
-    // Profile info band (board 07): cwd/model + the current-job chip (the Agents→Flow seam)
+    // profile 信息带（板 07）：cwd/model + 当前任务芯片（Agents→Flow 缝）
     @State private var profileCwd = ""
     @State private var profileModel = ""
     @State private var activeCaseTitle: String?
     @State private var activeCaseID: String?
-    // Presentation state separate from data state: loadProfileBand only
-    // writes data; only a chip tap sets presentation — otherwise opening the
-    // terminal is immediately covered by the sheet, and a second tap no-ops
-    // because the value did not change.
+    // 呈现态与数据态分离：loadProfileBand 只写数据；芯片点按才置呈现，
+    // 否则开终端即被 sheet 盖屏 + 二次点按因值未变而失效。
     @State private var presentedCase: CaseRef?
     @StateObject private var caseVM = LifecycleViewModel()
 
     private struct CaseRef: Identifiable { let id: String }
 
-    /// Profile info band: cwd · model · current-job chip (tap to open the case detail).
+    /// profile 信息带：cwd · model · 当前任务芯片（点开案卷详情）。
     @ViewBuilder
     private var profileBand: some View {
         if !profileCwd.isEmpty || activeCaseTitle != nil {
@@ -51,7 +47,7 @@ struct TerminalDetailView: View {
                     } label: {
                         HStack(spacing: 3) {
                             Image(systemName: "arrow.triangle.branch").font(.system(size: 8, weight: .bold))
-                            Text("Working · \(t)").lineLimit(1)
+                            Text("正在执行 · \(t)").lineLimit(1)
                         }
                         .font(DS.mono(9, .semibold))
                         .foregroundStyle(DS.Ink.mintDeep)
@@ -132,11 +128,11 @@ struct TerminalDetailView: View {
             ToolbarItem(placement: .topBarLeading) {
                 if let onClose {
                     Button(action: onClose) {
-                        Label("Close", systemImage: "xmark")
+                        Label("关闭", systemImage: "xmark")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.secondary)
                     }
-                    .accessibilityLabel("Close terminal")
+                    .accessibilityLabel("关闭终端")
                 }
             }
             ToolbarItem(placement: .principal) {
@@ -226,7 +222,7 @@ struct TerminalDetailView: View {
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
-                        Text("Session")
+                        Text("会话")
                             .font(DS.display(15, .semibold))
                         Text("\(drawerSessions.count)")
                             .font(DS.mono(12, .semibold))

@@ -140,7 +140,7 @@ enum SpeakableText {
         var result = lines.joined(separator: ". ")
         if result.count > maxChars {
             let end = result.index(result.startIndex, offsetBy: maxChars)
-            result = String(result[result.startIndex..<end]) + "…reply too long, truncated"
+            result = String(result[result.startIndex..<end]) + "…回复过长，已截断"
         }
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -158,7 +158,7 @@ enum SpeakableText {
     private static func stripURLs(from line: String) -> String {
         line.replacingOccurrences(
             of: #"https?://[^\s)]+"#,
-            with: "Link",
+            with: "链接",
             options: .regularExpression
         )
     }
@@ -274,10 +274,10 @@ final class AzureSpeechManager: NSObject, ObservableObject {
     private var pushStream: SPXPushAudioInputStream?
     private var pushedByteCount: Int64 = 0
     private var commitMode = false
-    /// Silence auto-commit (casual-chat mode): the VAD push stream and commit-phrase
+    /// Silence auto-commit (闲聊 mode): the VAD push stream and commit-phrase
     /// detector stay armed (a spoken phrase still commits instantly), but the
-    /// trailing-silence timer ALSO delivers the turn. Pure commit mode
-    /// (query/follow-through) only ever sends on the phrase.
+    /// trailing-silence timer ALSO delivers the turn. Pure commit mode (查询/
+    /// 落实) only ever sends on the phrase.
     private var silenceAutoCommit = false
     private var commitDetector: CommitPhraseDetector?
     private var maxDurationTimer: Timer?
@@ -292,7 +292,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
     private var resumeAfterInterruption = false
     // Dedupe guard: a final "recognized" result can land AFTER the trailing-
     // silence timer already delivered the same utterance (network jitter);
-    // without this, casual chat would send the sentence twice.
+    // without this 闲聊 would send the sentence twice.
     private var lastDeliveredText = ""
     private var lastDeliveredAt: Date?
     /// True while the call is user-paused: audio interruptions / route changes
@@ -406,7 +406,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
     func startListening(continuous: Bool = false, commit: Bool = false, silenceAuto: Bool = false) {
         guard !isListening else { return }
         guard isConfigured else {
-            listenState = .error("Fill in the Azure Speech key and region in Settings first")
+            listenState = .error("请先在设置里填写 Azure Speech key 和 region")
             return
         }
         self.commitMode = commit
@@ -414,7 +414,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
         // Best-effort reserve check: assume a turn is ~30s. If even that can't
         // fit, refuse up front rather than cutting off mid-sentence.
         guard quota.canConsumeSTT(seconds: 30) else {
-            let msg = "Speech recognition quota used up (monthly cap \(SpeechQuota.sttCapSeconds / 3600) h) — stopped."
+            let msg = "语音识别额度已用完（本月上限 \(SpeechQuota.sttCapSeconds / 3600) 小时），已停止。"
             listenState = .error(msg)
             onQuotaExhausted?(msg)
             return
@@ -494,7 +494,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
                     }
                     if self.commitMode, let detector = self.commitDetector {
                         // Commit mode: a spoken commit phrase ends a turn. In
-                        // silence-auto mode (casual chat) the trailing-silence timer is
+                        // silence-auto mode (闲聊) the trailing-silence timer is
                         // ALSO armed, so plain speech commits after a pause.
                         switch detector.ingest(text) {
                         case .accumulate(let transcript):
@@ -531,7 +531,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
                     // reason == .error means a genuine failure (auth, quota,
                     // network, mic); .endOfStream is a normal session close.
                     if evt.reason == .error {
-                        self.listenState = .error("Speech recognition error: \(evt.errorDetails ?? "")")
+                        self.listenState = .error("语音识别出错：\(evt.errorDetails ?? "")")
                     }
                     // Always fully stop on cancel, even in continuous mode.
                     self.stopListening()
@@ -558,7 +558,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
             listenState = .listening(partial: "")
             resetSilenceTimer()
         } catch {
-            listenState = .error("Recognition failed to start: \(error.localizedDescription)")
+            listenState = .error("启动识别失败：\(error.localizedDescription)")
         }
     }
 
@@ -582,10 +582,9 @@ final class AzureSpeechManager: NSObject, ObservableObject {
         if text.isEmpty, let partial = currentPartialText() {
             text = partial.trimmingCharacters(in: .whitespacesAndNewlines)
             // The partial never went through the detector, so a spoken commit
-            // phrase can still ride along (e.g. saying the commit phrase then
-            // tapping pause before the final result lands). Strip it the same
-            // way ingest would, so what we send matches what a commit would
-            // have sent.
+            // phrase can still ride along (e.g. "…请发送" then tapping 暂停
+            // before the final result lands). Strip it the same way ingest
+            // would, so what we send matches what a commit would have sent.
             if silenceAutoCommit, !text.isEmpty,
                case .commit(let payload) = CommitPhraseDetector(phrases: config.commitPhraseList).ingest(text) {
                 text = payload
@@ -601,7 +600,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
         }
         // In pure commit mode the commit phrase is the ONLY send trigger — a
         // manual stop or trailing silence must not send un-committed text.
-        // Silence-auto mode (casual chat) delivers on the timer like legacy mode.
+        // Silence-auto mode (闲聊) delivers on the timer like legacy mode.
         if (!commitMode || silenceAutoCommit), !text.isEmpty {
             // Same ack as the phrase-commit path (deliverCommit): the silence
             // auto-send is instantaneous and silent without it, so the user
@@ -670,7 +669,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
 
     private func resetSilenceTimer() {
         // Pure commit mode drives sends off the commit phrase, not trailing
-        // silence. Silence-auto mode (casual chat) keeps the timer armed as fallback.
+        // silence. Silence-auto mode (闲聊) keeps the timer armed as fallback.
         if commitMode && !silenceAutoCommit { return }
         silenceTimer?.invalidate()
         silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceInterval, repeats: false) { [weak self] _ in
@@ -711,14 +710,14 @@ final class AzureSpeechManager: NSObject, ObservableObject {
             throw NSError(
                 domain: "AzureSpeechManager",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "Could not create the audio stream format"]
+                userInfo: [NSLocalizedDescriptionKey: "无法创建音频流格式"]
             )
         }
         guard let stream = SPXPushAudioInputStream(audioFormat: fmt) else {
             throw NSError(
                 domain: "AzureSpeechManager",
                 code: 3,
-                userInfo: [NSLocalizedDescriptionKey: "Could not create the push stream"]
+                userInfo: [NSLocalizedDescriptionKey: "无法创建 push-stream"]
             )
         }
         pushStream = stream
@@ -744,7 +743,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
             throw NSError(
                 domain: "AzureSpeechManager",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Could not create the push-stream audio config"]
+                userInfo: [NSLocalizedDescriptionKey: "无法创建 push-stream 音频配置"]
             )
         }
         return cfg
@@ -803,7 +802,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
                 if !self.accumulatedText.isEmpty {
                     // In silence-auto mode a pause already sends, so teaching the
                     // commit phrase here would be misleading — just show the text.
-                    let hint = self.silenceAutoCommit ? "" : "\n(say ‘send it’ to finish)"
+                    let hint = self.silenceAutoCommit ? "" : "\n(说『请发送』结束)"
                     self.listenState = .listening(partial: self.accumulatedText + hint)
                 }
             }
@@ -820,7 +819,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
 
     // MARK: Call-mode mic suspension
 
-    /// Hot-switch silence auto-commit mid-call (mode switch casual chat ↔ query/follow-through)
+    /// Hot-switch silence auto-commit mid-call (mode switch 闲聊 ↔ 查询/落实)
     /// without restarting the recognizer. The commit-phrase detector stays
     /// armed either way; this only arms/disarms the trailing-silence fallback.
     /// No-op unless currently listening in commit mode.
@@ -869,7 +868,7 @@ final class AzureSpeechManager: NSObject, ObservableObject {
         guard !cleaned.isEmpty else { return }
         guard isConfigured else { return }
         guard quota.canConsumeTTS(chars: cleaned.count) else {
-            let msg = "TTS quota used up (monthly cap \(SpeechQuota.ttsCap) chars) — stopped speaking."
+            let msg = "语音合成额度已用完（本月上限 \(SpeechQuota.ttsCap) 字符），已停止朗读。"
             speakState = .error(msg)
             onQuotaExhausted?(msg)
             return
@@ -934,10 +933,10 @@ final class AzureSpeechManager: NSObject, ObservableObject {
                         // access failures worth flagging the same way.
                         if code == .forbidden || code == .authenticationFailure
                             || code == .tooManyRequests || code == .connectionFailure {
-                            msg = "TTS quota may be exhausted or auth failed (\(detail))"
+                            msg = "语音合成额度可能已用尽或鉴权失败（\(detail)）"
                             self.onQuotaExhausted?(msg)
                         } else {
-                            msg = "TTS error: \(detail)"
+                            msg = "语音合成出错：\(detail)"
                         }
                         self.speakState = .error(msg)
                     }
@@ -972,13 +971,13 @@ final class AzureSpeechManager: NSObject, ObservableObject {
                 } catch {
                     Task { @MainActor in
                         guard self.isSpeaking else { return }
-                        self.speakState = .error("TTS failed: \(error.localizedDescription)")
+                        self.speakState = .error("语音合成失败：\(error.localizedDescription)")
                         self.finishSpeaking()
                     }
                 }
             }
         } catch {
-            speakState = .error("TTS failed: \(error.localizedDescription)")
+            speakState = .error("语音合成失败：\(error.localizedDescription)")
             finishSpeaking()
         }
     }

@@ -1,13 +1,10 @@
 import Foundation
 
-/// .eml artifact preview (2026-09-21 user report: opening a mail artifact on
-/// the phone showed a pile of weirdness — the raw MIME fell into the
-/// video/black-screen branch). Minimal MIME parsing: header expansion +
-/// RFC2047 B/Q + multipart recursion + base64/QP decoding; **decode only
-/// text/* parts**; attachments list name and approximate size only (mail
-/// often carries multi-MB base64 — undecodable in practice, and it should
-/// not be decoded anyway). Rendered as HTML through the existing
-/// HTMLPreviewView (WKWebView local string, same route as html artifacts).
+/// .eml 工件预览（2026-09-21 用户报：手机上打开邮件工件一堆奇怪的东西——
+/// MIME 原文落进 video/黑屏分支）。最小 MIME 解析：头展开 + RFC2047 B/Q +
+/// multipart 递归 + base64/QP 解码；**只解码 text/\* 部件**，附件只列名与
+/// 近似体积（邮件常挂数 MB base64，解不动也不该解）。渲染成 HTML 走现成
+/// HTMLPreviewView（WKWebView 本地串，与 html 工件同路）。
 enum EmlPreview {
 
     struct View {
@@ -22,7 +19,7 @@ enum EmlPreview {
         var rawSizeLabel: String
     }
 
-    // ---- Decoding primitives ----------------------------------------------
+    // ---- 解码原语 ---------------------------------------------------------
 
     private static func decoder(forCharset cs: String) -> String.Encoding {
         let name = cs.trimmingCharacters(in: .whitespaces)
@@ -64,7 +61,7 @@ enum EmlPreview {
         return out
     }
 
-    /// RFC 2047: =?charset?B/Q?text?= (case-insensitive, may be several consecutive segments).
+    /// RFC 2047：=?charset?B/Q?text?=（大小写不敏感，可连续多段）。
     static func decodeMimeWords(_ s: String) -> String {
         guard let regex = try? NSRegularExpression(pattern: "=\\?([^?]+)\\?([bBqQ])\\?([^?]*)\\?=") else { return s }
         let ns = s as NSString
@@ -87,7 +84,7 @@ enum EmlPreview {
         return out.trimmingCharacters(in: .whitespaces)
     }
 
-    // ---- Structure parsing ------------------------------------------------
+    // ---- 结构解析 ---------------------------------------------------------
 
     private struct Headers {
         private let pairs: [(name: String, value: String)]
@@ -168,7 +165,7 @@ enum EmlPreview {
 
     static func parse(_ raw: String) -> View {
         guard let cut = raw.range(of: "\r\n\r\n") ?? raw.range(of: "\n\n") else {
-            return View(subject: "(empty message)", from: "", to: "", cc: "", date: "", text: "", html: "", attachments: [], rawSizeLabel: "0 B")
+            return View(subject: "(空邮件)", from: "", to: "", cc: "", date: "", text: "", html: "", attachments: [], rawSizeLabel: "0 B")
         }
         let headers = Headers(String(raw[..<cut.lowerBound]))
         let body = String(raw[cut.upperBound...])
@@ -176,7 +173,7 @@ enum EmlPreview {
         collect(headers, body: body, into: &acc, depth: 0)
         let decode = decodeMimeWords
         return View(
-            subject: decode(headers.value("subject")).isEmpty ? "(no subject)" : decode(headers.value("subject")),
+            subject: decode(headers.value("subject")).isEmpty ? "(无主题)" : decode(headers.value("subject")),
             from: decode(headers.value("from")),
             to: decode(headers.value("to")),
             cc: decode(headers.value("cc")),
@@ -188,7 +185,7 @@ enum EmlPreview {
         )
     }
 
-    // ---- Rendering: build the HTML string, through the existing HTMLPreviewView (WKWebView local load) --
+    // ---- 渲染：生成 HTML 串，走现成 HTMLPreviewView（WKWebView 本地加载）--
 
     static func renderHTML(_ raw: String) -> String {
         let v = parse(raw)
@@ -198,7 +195,7 @@ enum EmlPreview {
                 .replacingOccurrences(of: ">", with: "&gt;")
         }
         var rows = ""
-        for (k, val) in [("Subject", v.subject), ("From", v.from), ("To", v.to), ("Cc", v.cc), ("Time", v.date)] where !val.isEmpty {
+        for (k, val) in [("主题", v.subject), ("发件人", v.from), ("收件人", v.to), ("抄送", v.cc), ("时间", v.date)] where !val.isEmpty {
             rows += "<div class='row'><span class='k'>\(k)</span><span class='v'>\(esc(val))</span></div>"
         }
         let atts = v.attachments.isEmpty ? "" :
@@ -209,7 +206,7 @@ enum EmlPreview {
         } else if !v.html.isEmpty {
             body = "<iframe sandbox srcdoc=\"\(esc(v.html).replacingOccurrences(of: "\"", with: "&quot;"))\"></iframe>"
         } else {
-            body = "<p class='muted'>(no readable body part)</p>"
+            body = "<p class='muted'>(无可读正文部件)</p>"
         }
         return """
         <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
@@ -226,7 +223,7 @@ enum EmlPreview {
           iframe { width: 100%; min-height: 220px; border: 1px solid #ECEAE3; border-radius: 10px; }
         </style></head><body>
         <div>\(rows)</div>\(atts)\(body)
-        <p class='muted'>raw eml evidence · \(v.rawSizeLabel)</p>
+        <p class='muted'>原始 eml 物证 · \(v.rawSizeLabel)</p>
         </body></html>
         """
     }

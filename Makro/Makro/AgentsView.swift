@@ -12,31 +12,25 @@ final class AgentsViewModel: ObservableObject {
     @Published var profiles: [APIClient.AgentProfileView] = []
     @Published var sessions: [Session] = []
     @Published var cases: [LifecycleWorkflow] = []
-    /// Agent Mesh (board E): the mobile projection of a living graph —
-    /// structure = declaration expansion, activity = ledger route_decision
-    /// replay. Failure does not drag down the old structure (on failure it
-    /// falls back to the Profile card flow).
+    /// Agent Mesh（板E）：一张活图的移动投影——结构=声明展开，活动=账本
+    /// route_decision 回放。失败不拖垮旧结构（失败时回落 Profile 卡流）。
     @Published var graph: APIClient.AgentsGraph?
-    /// Graph request failure flag (0930 flicker fix): distinguishes "not
-    /// loaded yet" (loading) from "genuinely unobtainable" (degrade to the
-    /// old card flow) — previously both shared graph==nil, so the cold-start
-    /// loading window played the degraded UI first before switching away
-    /// (user-reported ~500ms flash on every tab entry).
+    /// graph 请求失败旗（0930 闪烁修复）：区分「还没加载到」（loading）与
+    /// 「确实拉不到」（降级老卡流）——此前两者共用 graph==nil，冷启动加载
+    /// 窗口会把降级 UI 先演一遍再切走（用户实报每次进 tab 闪 ~500ms）。
     @Published var graphFailed = false
-    /// First-load-complete flag: bounds the loading state (also keeps the "no agents yet" empty state from flashing on first screen).
+    /// 首轮加载完成旗：loading 态的边界（也挡住「暂无 agent」空态在首屏闪现）。
     @Published private(set) var loadedOnce = false
-    /// Artifact counts (data source for the board-06 per-profile "its artifacts" entry; same source for the mesh node chips).
+    /// 产物计数（板 06 per-profile「它的产物」入口的数据源；mesh 节点芯片同源）。
     @Published var artifactCounts: [String: Int] = [:]
     @Published var errorMessage: String?
     private var pollTask: Task<Void, Never>?
 
     // Display-only dual attribution, mirroring the desktop Agents panel:
     // name namespace (profile / profile-N clone) OR the pane's classified project.
-    // 2026-09-20 duplicate-card fix: the prefix rule was tightened to a
-    // "numeric-suffix clone" — profiles are 1:1 session derivatives; a naming
-    // prefix like juli-demo-card is not a clone, and the loose prefix once
-    // attached juli-dev-2 to its parent card while also giving it its own card
-    // (user-reported duplication).
+    // 2026-09-20 重复卡修复：前缀规则收紧为「数字后缀克隆」——profiles 是
+    // 会话 1:1 派生，juli-demo-card 这类命名前缀不是克隆，宽前缀曾把
+    // juli-dev-2 同时挂进父卡又独立成卡（用户实报重复）。
     static func isClone(_ name: String, of base: String) -> Bool {
         guard name.hasPrefix(base + "-") else { return false }
         let suffix = String(name.dropFirst(base.count + 1))
@@ -50,9 +44,8 @@ final class AgentsViewModel: ObservableObject {
         return s.project != nil && s.project == key
     }
 
-    /// Root card list (board 06): clone sessions (base-N) attach only to the
-    /// main card and never stand alone — juli-dev-2 belongs to juli-dev's card
-    /// and has no Profile of its own.
+    /// 根卡列表（板 06）：克隆会话（base-N）只挂主卡，不独立成卡——
+    /// juli-dev-2 属于 juli-dev 的卡，自身不再有 Profile。
     var rootProfiles: [APIClient.AgentProfileView] {
         profiles.filter { p in
             !profiles.contains { q in q.name != p.name && Self.isClone(p.name, of: q.name) }
@@ -68,7 +61,7 @@ final class AgentsViewModel: ObservableObject {
     }
 
     /// The live case (running/waiting) dispatched to this session — the
-    /// Agents→Flow seam: "what is this agent doing" answered without hunting the list.
+    /// Agents→Flow seam: "这个小张在干嘛" answered without hunting the list.
     func activeCase(for session: String) -> LifecycleWorkflow? {
         cases.first { w in
             ["running", "waiting_human"].contains(w.status)
@@ -85,12 +78,12 @@ final class AgentsViewModel: ObservableObject {
 
     func startPolling() {
         pollTask?.cancel()
-        // Pull artifact counts on entry (then every 60s; see refresh).
+        // 进场即拉产物计数（此后每 60s 一次，见 refresh）。
         lastArtifactFetch = nil
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh(forceArtifactRefresh: false)
-                // 5s: offset from the server's 3s tmux TTL (4s once hit for real every cycle).
+                // 5s：与服务端 tmux TTL 3s 错开（4s 曾每圈真打）。
                 try? await Task.sleep(for: .seconds(5))
             }
         }
@@ -100,27 +93,23 @@ final class AgentsViewModel: ObservableObject {
 
     private var lastArtifactFetch: Date?
 
-    /// forceArtifactRefresh=false is only for polling (artifact counts
-    /// throttled to 60s); explicit actions like pull-to-refresh call it with
-    /// no argument and always force.
-    /// 0930 parallelization: four async lets fire together — the sum of five
-    /// serial hops was one of the main reasons the mesh arrived half a second
-    /// late; artifact counts stay throttled and last (absence only affects the
-    /// chip number; brief lag is harmless).
+    /// forceArtifactRefresh=false 仅用于轮询（产物计数按 60s 节流）；
+    /// 下拉刷新等显式动作无参调用，始终强拉。
+    /// 0930 并行化：四路 async let 同发——串行五跳之和曾是 mesh 晚到半秒的
+    /// 主因之一；产物计数保持节流后置（缺席只影响芯片数字，短暂滞后无害）。
     func refresh(forceArtifactRefresh: Bool = true) async {
         async let profilesTask = APIClient.shared.fetchAgentProfiles()
         async let sessionsTask = APIClient.shared.fetchSessions()
         async let casesTask = APIClient.shared.fetchWorkflows()
         async let graphTask = APIClient.shared.fetchAgentsGraph()
-        // Independent trys: partial failure keeps whatever arrived (same as the old behavior — early arrivals are not dragged down).
+        // 各自 try：部分失败保留已到数据（与旧行为一致——早到的不陪葬）。
         var errs: [String] = []
         do { profiles = try await profilesTask } catch { errs.append("profiles: \(error.localizedDescription)") }
         do { sessions = try await sessionsTask } catch { errs.append("sessions: \(error.localizedDescription)") }
         do { cases = try await casesTask } catch { errs.append("cases: \(error.localizedDescription)") }
-        errorMessage = errs.isEmpty ? nil : errs.joined(separator: "; ")
-        // Artifact counts: best effort (failure does not block the page; a
-        // missing count leaves the chip icon-only, no number). Polled every
-        // 60s — a full pull every cycle is pointless traffic over the frp tunnel.
+        errorMessage = errs.isEmpty ? nil : errs.joined(separator: "；")
+        // 产物计数：尽力而为（失败不挡页面，计数缺席则芯片只显图标无数字）。
+        // 轮询下 60s 一拉——每圈全量拉取在 frp 隧道上是无谓流量。
         let now = Date()
         if forceArtifactRefresh || lastArtifactFetch == nil
             || now.timeIntervalSince(lastArtifactFetch!) >= 60 {
@@ -129,10 +118,8 @@ final class AgentsViewModel: ObservableObject {
                 artifactCounts = Dictionary(grouping: arts, by: { $0.session }).mapValues { $0.count }
             }
         }
-        // graph: set the flag on failure (the view degrades to the old card
-        // flow accordingly); success keeps the semantics unchanged — a
-        // transient failure does not wipe the last good structure;
-        // never-succeeded + failed = degrade, never-succeeded + in flight = loading.
+        // graph：失败置旗（视图据此降级老卡流），成功保留语义不变——瞬态
+        // 失败不打没上一份好结构；从未成功+失败=降级，从未成功+在途=loading。
         do {
             graph = try await graphTask
             graphFailed = false
@@ -142,17 +129,15 @@ final class AgentsViewModel: ObservableObject {
         loadedOnce = true
     }
 
-    /// Artifact count under a profile name — exact = the base-session basis,
-    /// strictly consistent with the deep-link filter
-    /// (ArtifactsView selectedSession == profile.name): the chip counts N,
-    /// tapping in shows exactly N. Clone-session artifacts are reachable via
-    /// ArtifactsView's "All" / their own session chips and are not totaled
-    /// here.
+    /// profile 名下产物数——精确=基础会话口径，与深链过滤
+    /// （ArtifactsView selectedSession == profile.name）严格一致：
+    /// 芯片计 N 件，点进去恰好 N 件。克隆会话产物从 ArtifactsView
+    /// 「All」/各自 session 芯片可达，不在此合计。
     func artifactCount(for p: APIClient.AgentProfileView) -> Int? {
         artifactCounts[p.name]
     }
 
-    /// Mesh node name = session name; artifact counts share the same source and basis (tapping into the Artifacts filter shows exactly N).
+    /// mesh 节点名=会话名，产物计数同源同口径（点进 Artifacts 过滤恰好 N 件）。
     func artifactCount(forSession name: String) -> Int? {
         artifactCounts[name]
     }
@@ -170,17 +155,15 @@ struct AgentsView: View {
     @State private var path: [String] = []
     // Collapsed set: a profile starts expanded; user taps to fold it.
     @State private var collapsedProfiles: Set<String> = []
-    // Mesh (board E): dimensions = two sorts of the same data; tapping the
-    // "recent dispatch" chip lights up that run's chain on the graph
-    // (replay, not judgment).
+    // Mesh（板E）：维度=同一份数据的两种排序；点「最近分发」chip 把该 run
+    // 的链路亮在图上（回放，不判定）。
     @State private var meshDim: MeshDim = .company
     @State private var selectedRoute: APIClient.MeshRoute?
 
-    enum MeshDim: String, CaseIterable { case company = "By company", domain = "By domain" }
+    enum MeshDim: String, CaseIterable { case company = "按公司", domain = "按业务" }
 
-    // Skills catalog (2026-10-02 retrospective phase 1): a second-layer entry
-    // — a low-key footer row into a sheet, not first-layer/top-right (the UX
-    // ruling that browsing surfaces carry no primary actions stands).
+    // 技能目录（2026-10-02 追溯一期）：第二层入口——页脚低调行进 sheet，
+    // 不占第一层/右上角（浏览面不放主动作的 UX 裁决不变）。
     @State private var showSkills = false
 
     struct CaseRef: Identifiable {
@@ -191,36 +174,31 @@ struct AgentsView: View {
     var body: some View {
         NavigationStack(path: $path) {
             Group {
-                // 0930 state machine settled: loading (first round in
-                // flight) / empty (fetched but genuinely none) / mesh
-                // (normal) / degraded (graph genuinely unobtainable) — four
-                // distinct states; the old card flow is no longer treated as
-                // graph's loading state (the root cause of the ~500ms flash
-                // on every tab entry).
+                // 0930 状态机定案：loading（首轮在途）/ 空态（拉到了但真没有）/
+                // mesh（正常）/ 降级（graph 确实拉不到）——四态分明，老卡流
+                // 不再被当 graph 的加载态（每次进 tab 闪 ~500ms 的根因）。
                 if !vm.loadedOnce {
                     VStack(spacing: 10) {
                         ProgressView()
-                        Text("Loading topology…")
+                        Text("连接组织图…")
                             .font(DS.mono(12)).foregroundStyle(.tertiary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if vm.profiles.isEmpty && vm.sessions.isEmpty && vm.errorMessage == nil {
                     VStack(spacing: 8) {
                         Image(systemName: "cpu").font(.system(size: 32)).foregroundStyle(.tertiary)
-                        Text("No agents running")
+                        Text("暂无执行中的 agent")
                             .font(.system(size: 14))
                             .foregroundStyle(.secondary)
-                        Text("Agents appear here when a job reaches its execution step")
+                        Text("业务流走到「执行」步骤时，这里会出现干活的 agent")
                             .font(.system(size: 12))
                             .foregroundStyle(.tertiary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    // Board 06: hand-drawn card flow (white cards, corner
-                    // radius 14, no system dividers) — List/DisclosureGroup
-                    // is the old structure; the designed Agents home is a
-                    // decision surface of one card per agent, not a
-                    // settings-page tree.
+                    // 板 06：自绘卡片流（白卡·圆角 14·无系统分割线）——List/
+                    // DisclosureGroup 是老 structure，设计的 Agents 主页是
+                    // 「一 agent 一卡」的决策面，不是设置页树。
                     ScrollView {
                         VStack(spacing: 12) {
                             if let err = vm.errorMessage {
@@ -232,20 +210,18 @@ struct AgentsView: View {
                             if vm.graph != nil {
                                 meshSection
                             } else if !vm.graphFailed {
-                                // Profiles exist but the first graph fetch is in flight (an extremely short window after parallelization).
+                                // 已有 profiles 但 graph 首拉在途（并行后窗口极短）。
                                 VStack(spacing: 10) {
                                     ProgressView()
-                                    Text("Loading topology…")
+                                    Text("连接组织图…")
                                         .font(DS.mono(12)).foregroundStyle(.tertiary)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 32)
                             } else {
-                                // Graph genuinely unobtainable → degrade to
-                                // the old card flow (including the artifacts
-                                // entry, see onOpenArtifacts below — mesh
-                                // nodes carry the same chip).
-                                Text("Agent profiles · declared")
+                                // graph 确实拉不到 → 降级老卡流（含产物入口，
+                                // 见下方 onOpenArtifacts——Mesh 节点也有同款芯片）。
+                                Text("Agent Profiles · 常驻声明")
                                     .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 ForEach(vm.rootProfiles) { p in
@@ -269,18 +245,15 @@ struct AgentsView: View {
                                     OrphanSessionsCard(sessions: vm.orphanSessions)
                                 }
                             }
-                            // Board 06 footer discipline: navigation must be
-                            // visible (navigation hidden in a long-press =
-                            // nonexistent). Skills catalog entry (second
-                            // layer): a low-key footer capsule, seen only at
-                            // the bottom of the scroll.
+                            // 板 06 页脚纪律：导航必须可见（长按里藏导航=不存在）。
+                            // 技能目录入口（第二层）：页脚低调胶囊，滚动到底才见。
                             Button {
                                 showSkills = true
                             } label: {
                                 HStack(spacing: 5) {
                                     Image(systemName: "square.stack.3d.up")
                                         .font(.system(size: 10))
-                                    Text("Skill catalog")
+                                    Text("技能目录")
                                         .font(DS.mono(10))
                                 }
                                 .foregroundStyle(.secondary)
@@ -289,9 +262,9 @@ struct AgentsView: View {
                                 .clipShape(Capsule())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Skill catalog")
+                            .accessibilityLabel("技能目录")
                             .padding(.bottom, 6)
-                            Text("Tap a session row → terminal · tap a chip → its entity · nothing dangles")
+                            Text("点会话行 → 终端 · 点芯片 → 对应实体 · 无处可去的名字不存在")
                                 .font(DS.mono(10)).foregroundStyle(.tertiary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 6)
@@ -318,13 +291,11 @@ struct AgentsView: View {
                         RoutingDagView()
                     } label: {
                         Image(systemName: "arrow.triangle.branch")
-                            .accessibilityLabel("Routing map")
+                            .accessibilityLabel("路由图")
                     }
                 }
-                // Settings entry = the 4th tab-bar item ⚙ (board 02); no
-                // primary action top-right on this page — top-right carries
-                // only the tab's own primary action, never on browsing
-                // surfaces (uniform UX ruling).
+                // 设置入口 = tab 栏第 4 项 ⚙（板 02）；本页右上无主动作——
+                // 右上角只放本 tab 的主动作，浏览面不放（UX 统一裁决）。
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 6) {
                         Text("Agents").font(DS.display(18, .semibold)).tracking(-0.3)
@@ -349,9 +320,8 @@ struct AgentsView: View {
         }
     }
 
-    /// Mesh (board E): the organization section = a living-graph projection.
-    /// Extracted into its own builder — the whole block inline once pushed
-    /// the compiler past type-check timeout (the old large-expression pit).
+    /// Mesh（板E）：组织区=活图投影。抽成独立 builder——整块内联曾让
+    /// 编译器 type-check 超时（大表达式的老坑）。
     @ViewBuilder
     private var meshSection: some View {
         if let g = vm.graph {
@@ -376,10 +346,8 @@ struct AgentsView: View {
                         openCase = CaseRef(id: w.id, title: w.title)
                         Task { await caseVM.select(w.id) }
                     },
-                    // The artifact deep link uses the same mechanism as the
-                    // old cards: set producer → MakroApp switches to the
-                    // Artifacts tab filtered (board-06 cross-dimension chip;
-                    // node name = session name for a consistent basis).
+                    // 产物深链与老卡同一机制：置 producer → MakroApp 切 Artifacts
+                    // tab 过滤（板 06 跨维芯片，节点名=会话名口径一致）。
                     onOpenArtifacts: { producer in
                         DeepLinkRouter.shared.artifactsProducer = producer
                     }
@@ -403,11 +371,9 @@ struct AgentsView: View {
     }
 }
 
-// Board 06 · Agent card: standing declaration (workspace/model/duty) + live
-// sessions + "working on" chips (they follow the session) + artifacts entry.
-// Collapsed = a one-line summary (makro / tmux / cwd · N sessions ›);
-// expanded = the full declaration. White card, corner radius 14, no system
-// dividers.
+// 板 06 · Agent 卡：常驻声明（workspace/model/职责）+ 活会话 + 正在执行
+// 芯片（跟会话走）+ 产物入口。折叠态=一行摘要（makro / tmux / cwd · N 会话 ›），
+// 展开态=完整声明。卡片白底圆角 14，无系统分割线。
 private struct ProfileCard: View {
     let profile: APIClient.AgentProfileView
     let sessions: [Session]
@@ -425,7 +391,7 @@ private struct ProfileCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Header row: status dot + name + runtime + collapse chevron (whole row tappable to collapse)
+            // 头行：状态点 + 名字 + runtime + 折叠箭头（整行可点折叠）
             Button(action: onToggle) {
                 HStack(spacing: 6) {
                     Circle().fill(dotColor)
@@ -441,16 +407,16 @@ private struct ProfileCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(expanded ? "Collapse \(profile.name)" : "Expand \(profile.name)")
+            .accessibilityLabel(expanded ? "折叠 \(profile.name)" : "展开 \(profile.name)")
 
             if expanded {
-                // Declaration zone: cwd · model · duty
+                // 声明区：cwd · model · 职责
                 Text([profile.cwd, profile.model].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(DS.mono(11)).foregroundStyle(.tertiary).lineLimit(1)
                 if let brief = profile.prompt_brief, !brief.isEmpty {
                     Text(brief).font(DS.text(13)).foregroundStyle(.secondary).lineLimit(2)
                 }
-                // Session rows + their own "working on" chips (board 06: chips follow the session)
+                // 会话行 + 各自的「正在执行」芯片（板 06：芯片跟会话走）
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(sessions) { s in
                         SessionNavRow(session: s)
@@ -459,14 +425,14 @@ private struct ProfileCard: View {
                         }
                     }
                 }
-                // Artifacts entry (board 06: ▣ its artifacts · N items › → Artifacts filtered view)
+                // 产物入口（板 06：▣ 它的产物 · N 件 › → Artifacts 过滤视图）
                 Button {
                     onOpenArtifacts(profile.name)
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "doc.richtext")
                             .font(.system(size: 10, weight: .bold))
-                        Text(artifactCount.map { "Its artifacts · \($0)" } ?? "Its artifacts")
+                        Text(artifactCount.map { "它的产物 · \($0) 件" } ?? "它的产物")
                             .font(DS.mono(11, .semibold))
                         Spacer()
                         Image(systemName: "chevron.right")
@@ -479,10 +445,10 @@ private struct ProfileCard: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("View artifacts of \(profile.name)")
+                .accessibilityLabel("查看 \(profile.name) 的产物")
             } else {
-                // Collapsed summary (board 06): one line = name · runtime · cwd · N sessions
-                Text("\(profile.cwd ?? profile.name) · \(sessions.count) sessions")
+                // 折叠摘要（板 06）：一行 = 名 · runtime · cwd · N 会话
+                Text("\(profile.cwd ?? profile.name) · \(sessions.count) 会话")
                     .font(DS.mono(11)).foregroundStyle(.tertiary).lineLimit(1)
             }
         }
@@ -501,7 +467,7 @@ private struct ProfileCard: View {
     }
 }
 
-// "Working on" chip (board 06): ⑂ + case name → Flow case detail.
+// 正在执行芯片（板 06）：⑂ + 案卷名 → Flow 案卷详情。
 private struct ActiveCaseChip: View {
     let workflow: LifecycleWorkflow
     let onTap: () -> Void
@@ -510,7 +476,7 @@ private struct ActiveCaseChip: View {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.triangle.branch")
                     .font(.system(size: 10, weight: .bold))
-                Text("Working · \(workflow.title)")
+                Text("正在执行 · \(workflow.title)")
                     .font(DS.mono(11, .semibold)).lineLimit(1)
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -523,17 +489,17 @@ private struct ActiveCaseChip: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open the running casefile \(workflow.title)")
+        .accessibilityLabel("打开正在执行的案卷 \(workflow.title)")
         .padding(.leading, 12)
     }
 }
 
-// Unassigned-sessions card (board 06): same card form, title row + session rows.
+// 未归属会话卡（板 06）：同款卡片形态，标题行 + 会话行。
 private struct OrphanSessionsCard: View {
     let sessions: [Session]
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Unassigned sessions · \(sessions.count)")
+            Text("未归属会话 · \(sessions.count)")
                 .font(DS.mono(11, .semibold)).foregroundStyle(.secondary)
             ForEach(sessions) { s in
                 SessionNavRow(session: s)
@@ -547,14 +513,13 @@ private struct OrphanSessionsCard: View {
 }
 
 // A tappable session line — the counterpart that used to be display-only
-// in the old Agents tab (the fragmentation this view exists to kill).
+// in the old Agents tab (the "割裂" this view exists to kill).
 private struct SessionNavRow: View {
     let session: Session
 
     private var dotColor: Color {
-        // working = primary orange (board E legend "orange = working", same
-        // semantics as MeshNodeRow/ProfileCard); amber already means
-        // "awaiting review/thinking" in DS — no double duty.
+        // working=主橘（板E 图例「橘=干活」，与 MeshNodeRow/ProfileCard 同语义）；
+        // amber 在 DS 里语义是「待审/thinking」，不再双占。
         if session.working { return DS.Ink.mint }
         return session.agent.isEmpty && !session.active ? Color.secondary : DS.Ink.done
     }
@@ -585,13 +550,10 @@ private struct SessionNavRow: View {
     }
 }
 
-// MARK: - Mesh (board E · applied 2026-09-20)
-// Organization section = living-graph projection: switching dimensions is a
-// re-sort of the same data (the other dimension becomes node labels); clone
-// attachments stay inside cards, not top level; unassigned go into a dashed
-// card; tapping the "recent dispatch" chip highlights that run's chain.
-// The view owns zero state of its own — everything comes from
-// /api/agents/graph.
+// MARK: - Mesh（板E · 2026-09-20 apply）
+// 组织区=活图投影：维度切换是同一份数据重排（另一维变成节点标签），
+// 克隆挂卡不占顶层，未归属进虚线卡；点「最近分发」chip 高亮该 run 链路。
+// 视图零自有状态——全部来自 /api/agents/graph。
 
 private struct MeshGroup {
     let title: String
@@ -606,15 +568,13 @@ private func meshGroups(g: APIClient.AgentsGraph, tops: [APIClient.MeshNode], di
             guard !mine.isEmpty else { return nil }
             var doms: [(String, [APIClient.MeshNode])] = g.domains
                 .filter { $0.company == company }
-                // Name the outer dom explicitly: the inner closure's $0 is a
-                // MeshNode and once shadowed the outer $0, degrading the
-                // comparison to node.domain == node.name (domain subgroups
-                // always empty).
+                // 外层显式命名 dom：内层闭包的 $0 是 MeshNode，曾遮蔽外层
+                // $0 使比较退化为 node.domain == node.name（业务子分组恒空）。
                 .map { dom in (dom.name, mine.filter { $0.domain == dom.name }) }
                 .filter { !$0.1.isEmpty }
             let rest = mine.filter { n in !doms.contains { $0.0 == (n.domain ?? "") } }
-            if !rest.isEmpty { doms.append(("No domain", rest)) }
-            return MeshGroup(title: company, subtitle: "\(mine.count) sessions", domains: doms)
+            if !rest.isEmpty { doms.append(("未分业务", rest)) }
+            return MeshGroup(title: company, subtitle: "\(mine.count) 会话", domains: doms)
         }
     }
     let byDomain = Dictionary(grouping: tops.filter { !($0.domain ?? "").isEmpty }, by: { $0.domain ?? "" })
@@ -622,10 +582,10 @@ private func meshGroups(g: APIClient.AgentsGraph, tops: [APIClient.MeshNode], di
         let nodes = (byDomain[name] ?? []).sorted { $0.name < $1.name }
         return MeshGroup(title: name, subtitle: "\(nodes.count)", domains: [(name, nodes)])
     }
-    // P2⑤: nodes with a company but no domain must not vanish when switching dimensions — they land in an "unassigned domain" group.
+    // P2⑤：有公司无业务的节点不能因切维度消失——落「未分业务」组。
     let rest = tops.filter { ($0.domain ?? "").isEmpty }
     if !rest.isEmpty {
-        groups.append(MeshGroup(title: "No domain", subtitle: "\(rest.count)", domains: [("No domain", rest.sorted { $0.name < $1.name })]))
+        groups.append(MeshGroup(title: "未分业务", subtitle: "\(rest.count)", domains: [("未分业务", rest.sorted { $0.name < $1.name })]))
     }
     return groups
 }
@@ -668,7 +628,7 @@ private struct RecentDispatchChips: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Text("Recent dispatches")
+                Text("最近分发")
                     .font(DS.mono(10)).foregroundStyle(.tertiary)
                 ForEach(recent) { r in
                     Button {
@@ -689,7 +649,7 @@ private struct RecentDispatchChips: View {
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Replay dispatch \(label(r))")
+                    .accessibilityLabel("回放分发 \(label(r))")
                 }
             }
         }
@@ -728,7 +688,7 @@ private struct MeshGroupCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(group.title) \(expanded ? "Collapse" : "Expand")")
+            .accessibilityLabel("\(group.title) \(expanded ? "折叠" : "展开")")
             if expanded {
                 ForEach(group.domains, id: \.name) { dom in
                     VStack(alignment: .leading, spacing: 6) {
@@ -742,10 +702,8 @@ private struct MeshGroupCard: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.leading, 4)
-                        // Two-column node cards (2026-10-03 user directive,
-                        // same as the Workflow/Artifacts two-column final):
-                        // nothing lost, one size smaller into half-width
-                        // cards.
+                        // 双列节点卡（2026-10-03 用户口令，照 Workflow/Artifacts
+                        // 双列定稿同款）：要素不丢、缩小一档进半宽卡。
                         LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                             ForEach(dom.nodes) { node in
                                 MeshNodeRow(
@@ -795,19 +753,16 @@ private struct MeshNodeRow: View {
     var body: some View {
         NavigationLink(value: node.name) {
             VStack(alignment: .leading, spacing: 6) {
-                // ① Top row: status dot + name + artifacts chip (right)
+                // ① 顶行：状态点 + 名字 + 产物芯片（右）
                 HStack(spacing: 6) {
                     Circle().fill(dotColor).frame(width: 7, height: 7).breathing(working)
                     Text(node.name).font(DS.mono(12.5, .semibold)).foregroundStyle(.primary)
                         .lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 0)
-                    // Artifacts chip (board 06 Feature folded into Mesh,
-                    // 0930): ▣ + count, tap = deep link to the Artifacts
-                    // filtered view (MakroApp switches tabs); if the count is
-                    // missing (60s throttle window / fetch failure) the icon
-                    // shows alone. An independent Button nested inside a
-                    // NavigationLink, same as the "working on" chip — it does
-                    // not hijack the row tap into the terminal.
+                    // 产物芯片（板 06 Feature 收编进 Mesh，0930）：▣ + 计数，
+                    // 点=深链 Artifacts 过滤视图（MakroApp 切 tab）；计数缺席
+                    // （60s 节流窗口/拉取失败）只显图标。嵌在 NavigationLink
+                    // 内的独立按钮，与「正在执行」芯片同款——不劫持点行进终端。
                     Button { onOpenArtifacts(node.name) } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "doc.richtext")
@@ -822,19 +777,16 @@ private struct MeshNodeRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 5))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("View artifacts of \(node.name)")
+                    .accessibilityLabel("查看 \(node.name) 的产物")
                 }
-                // ② Label row: bound / default / company / clone count — a
-                // standing placeholder keeps the row height
-                // (wf_66a9b632154d aside: two cards in one row with mismatched
-                // heights = conditionally-rendered collapsed rows, user
-                // directive).
+                // ② 标签行：绑定 / 默认 / 公司 / 克隆数——常驻占位保行高
+                //（wf_66a9b632154d 顺带：同行两卡高度不齐=条件渲染塌行，用户口令）。
                 HStack(spacing: 4) {
                     if node.isBound {
-                        meshTag("bound", tint: DS.Ink.mint)
+                        meshTag("绑定", tint: DS.Ink.mint)
                     }
                     if node.name == graph.defaultSession {
-                        meshTag("default", tint: DS.Ink.zinc)
+                        meshTag("默认", tint: DS.Ink.zinc)
                     }
                     if showCompanyTag, let c = node.company, !c.isEmpty {
                         meshTag(c, tint: DS.Ink.amber)
@@ -845,16 +797,15 @@ private struct MeshNodeRow: View {
                     Spacer(minLength: 0)
                 }
                 .frame(minHeight: 18, alignment: .leading)
-                // ③ "Working on" chip (own row; at half width it no longer
-                // fights the name for space) — a standing container keeps the
-                // row height (wf_66a9b632154d aside: uniform card heights).
+                // ③ 正在执行芯片（独占一行，半宽下不再与名字抢位）——
+                // 常驻容器保行高（wf_66a9b632154d 顺带：卡片高度整齐化）。
                 Group {
                   if let w = activeCase {
                     Button { onOpenCase(w) } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "arrowtriangle.right.fill")
                                 .font(.system(size: 8, weight: .bold))
-                            Text("Working · \(w.title)").lineLimit(1).truncationMode(.middle)
+                            Text("正在执行 · \(w.title)").lineLimit(1).truncationMode(.middle)
                         }
                         .font(DS.mono(10, .semibold))
                         .foregroundStyle(DS.Ink.mintDeep)
@@ -864,10 +815,10 @@ private struct MeshNodeRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: DS.R.sm))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Open the running casefile \(w.title)")
+                    .accessibilityLabel("打开正在执行的案卷 \(w.title)")
                   }
                 }
-                .frame(minHeight: 24, alignment: .leading) // standing row height, same trick as the label row to stay even
+                .frame(minHeight: 24, alignment: .leading) // 常驻行高，与标签行同法保齐
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -878,7 +829,7 @@ private struct MeshNodeRow: View {
             .clipShape(RoundedRectangle(cornerRadius: DS.R.btn, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Session \(node.name)")
+        .accessibilityLabel("会话 \(node.name)")
     }
 
     private func meshTag(_ text: String, tint: Color) -> some View {
@@ -897,7 +848,7 @@ private struct UnassignedNodesCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Unassigned · \(nodes.count)    declare them to enter the graph (config.agents)")
+            Text("未归属 · \(nodes.count)    进图先声明（config.agents）")
                 .font(DS.mono(10)).foregroundStyle(.tertiary)
             ForEach(nodes) { node in
                 NavigationLink(value: node.name) {
@@ -924,16 +875,15 @@ private struct UnassignedNodesCard: View {
 }
 
 extension APIClient.AgentsGraph {
-    /// Domain name → any company declaring it (for group hot-highlight; for same-name domains across companies the first declaration wins).
+    /// 域名→任一声明它的公司（分组热高亮用；跨公司同名域取第一个声明）。
     func companyOf(dom: String) -> String? {
         domains.first { $0.name == dom }?.company
     }
 }
 
-// MARK: - Skills catalog (Agents page second-layer sheet, 2026-10-02 retrospective phase 1) ─────────────
-// Data = GET /api/skills: family grouping (own family first) + purpose +
-// dispatch health + skill_used usage aggregation. uses=0 honestly shows
-// "never called" — a truthful supply-side view, no fabrication.
+// MARK: - 技能目录（Agents 页第二层 sheet，2026-10-02 追溯一期）─────────────
+// 数据 = GET /api/skills：家族分组（自家在前）+ 用途 + 分发健康 + skill_used
+// 用量聚合。uses=0 如实显示「尚未被调用」——供给面真实口径，不伪造。
 
 struct SkillsListView: View {
     @Environment(\.dismiss) private var dismiss
@@ -948,7 +898,7 @@ struct SkillsListView: View {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.system(size: 26))
                             .foregroundStyle(DS.Ink.amber)
-                        Text("Failed to load skill catalog")
+                        Text("技能目录加载失败")
                             .font(DS.text(13))
                             .foregroundStyle(.secondary)
                     }
@@ -969,11 +919,11 @@ struct SkillsListView: View {
                     .background(DS.Canvas.app.ignoresSafeArea())
                 }
             }
-            .navigationTitle("Skills")
+            .navigationTitle("技能")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button("完成") { dismiss() }
                 }
             }
         }
@@ -993,7 +943,7 @@ struct SkillsListView: View {
         var items: [SkillInfo]
     }
 
-    /// The server already sorts by family order (juli→tool) + usage; here we only group by family (keeping section order).
+    /// 服务端已按 家族序(juli→tool)+用量序 排好；此处只按家族分组（保持段序）。
     private func familySections() -> [FamilySection] {
         var out: [FamilySection] = []
         for s in skills {
@@ -1005,10 +955,10 @@ struct SkillsListView: View {
 
     private func familyLabel(_ f: String) -> String {
         switch f {
-        case "juli": return "Juli family"
-        case "client": return "Client"
-        case "makro": return "Makro family"
-        default: return "General tools"
+        case "juli": return "橘粒 · juli 系"
+        case "client": return "Client 系"
+        case "makro": return "Makro 系"
+        default: return "通用工具"
         }
     }
 }
@@ -1043,14 +993,14 @@ private struct SkillRow: View {
                     .background(familyColor.opacity(0.1))
                     .clipShape(Capsule())
                 if skill.resident {
-                    Text("Resident")
+                    Text("常驻")
                         .font(DS.mono(9)).foregroundStyle(DS.Ink.slate)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(DS.Ink.slate.opacity(0.1))
                         .clipShape(Capsule())
                 }
                 Spacer()
-                // Dispatch health: four resolved targets out of alignment = warning color (the early-warning surface for orphaned-target incidents).
+                // 分发健康：四落点不齐 = 警示色（孤儿落点事故的前兆面）。
                 Text("\(skill.targetsOk)/\(skill.targetsTotal)")
                     .font(DS.mono(10))
                     .foregroundStyle(skill.targetsOk == skill.targetsTotal
@@ -1064,7 +1014,7 @@ private struct SkillRow: View {
             }
             HStack(spacing: 6) {
                 if skill.uses > 0 {
-                    Label("called \(skill.uses)×", systemImage: "bolt.horizontal")
+                    Label("调用 \(skill.uses)", systemImage: "bolt.horizontal")
                         .font(DS.mono(10)).foregroundStyle(.secondary)
                     if let ago = usedAgo {
                         Text("· \(ago)").font(DS.mono(10)).foregroundStyle(.tertiary)
@@ -1077,7 +1027,7 @@ private struct SkillRow: View {
                             .clipShape(Capsule())
                     }
                 } else {
-                    Text(skill.resident ? "Loaded with every task card (not a call)" : "Not called yet")
+                    Text(skill.resident ? "每张任务卡必载（无调用语义）" : "尚未被调用")
                         .font(DS.mono(10)).foregroundStyle(.tertiary)
                 }
                 Spacer()
